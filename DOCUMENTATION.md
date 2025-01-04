@@ -1,7 +1,7 @@
 # Dummy Simple Venv Manager Documentation
 
 ## Overview
-Dummy Simple Venv Manager is a user-friendly tool for managing Python virtual environments. It provides a simple way to create, manage, and maintain virtual environments with separate working directories and customizable hot commands.
+Dummy Simple Venv Manager is a dummy simple script for managing Python virtual environments. It provides a simple way to create, manage, and maintain virtual environments with separate working directories and customizable hot commands.
 
 ### Key Concepts
 - When a venv is created it will place the core venv files inside of the venv directory that was set during the initial setup
