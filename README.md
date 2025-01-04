@@ -18,7 +18,7 @@ Just Python and BASH. Conda is optional for creating venvs using specific versio
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/username/dummy-simple-venv-manager.git
+git clone https://github.com/VilktorK/DummySimpleVenvManager
 ```
 
 2. Navigate to the directory:
