@@ -148,7 +148,6 @@ fi
 display_options_menu() {
     echo "Options:"
     echo "1. Create a new venv"
-    echo "2. Change venv directory"
     echo "3. Delete a venv"
     echo "0. Back to main menu"
 }
@@ -203,11 +202,7 @@ handle_custom_options() {
             create_new_venv
             return 2  
             ;;
-        2)
-            set_venv_directory
-            return 0  
-            ;;
-        3)  # New case
+        2)  # New case
             delete_venv
             return 2
             ;;
