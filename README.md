@@ -1,6 +1,6 @@
 # Dummy Simple Venv Manager
 
-Dummy Simple Venv Manager is a dummy simple BASH script for simplifying the process of creating and using python virtual environments.
+A dummy simple BASH script that simplifies the process of creating and using Python virtual environments.
 ![image](https://github.com/user-attachments/assets/2fbe4d73-a242-481b-bed4-0d73f954e7cb)
 
 ## Features
@@ -23,7 +23,7 @@ git clone https://github.com/VilktorK/DummySimpleVenvManager
 
 2. Navigate to the directory:
 ```bash
-cd dummy-simple-venv-manager
+cd DummySimpleVenvManager
 ```
 
 3. Make the script executable:
