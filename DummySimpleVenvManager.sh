@@ -148,7 +148,7 @@ fi
 display_options_menu() {
     echo "Options:"
     echo "1. Create a new venv"
-    echo "3. Delete a venv"
+    echo "2. Delete a venv"
     echo "0. Back to main menu"
 }
 
