@@ -202,7 +202,7 @@ handle_custom_options() {
             create_new_venv
             return 2  
             ;;
-        2)  # New case
+        2)
             delete_venv
             return 2
             ;;
