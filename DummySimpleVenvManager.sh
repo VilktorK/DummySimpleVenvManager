@@ -265,14 +265,35 @@ handle_option() {
 }
 
 create_new_venv() {
-    local venv_dir=$(grep "^VENV_DIR=" "$SETTINGS_FILE" | cut -d= -f2)
+    local venv_dir=$(get_venv_directory)
+    if [ $? -ne 0 ]; then
+        echo "Error: Could not determine venv directory."
+        return 1
+    fi
+
     echo -e "\n\033[1;36mCreate New venv\033[0m"
     echo -e "\033[90m----------------------------------------\033[0m"
-    read -p "Enter the name for the new venv (or press Enter to exit the program): " venv_name
-    if [ -z "$venv_name" ]; then
-        echo "Operation canceled."
-        return
-    fi
+
+    while true; do
+        read -p "Enter the name for the new venv: " venv_name
+        if [ -z "$venv_name" ]; then
+            echo "Operation cancelled."
+            return 1
+        fi
+
+        # Validate venv name (alphanumeric, dash, and underscore only)
+        if ! [[ "$venv_name" =~ ^[a-zA-Z0-9_-]+$ ]]; then
+            echo "Error: Venv name can only contain letters, numbers, dashes, and underscores."
+            continue
+        fi
+
+        # Check if venv directory already exists
+        if [ -d "$venv_dir/$venv_name" ]; then
+            echo "Error: A venv with this name already exists."
+            continue
+        fi
+        break
+    done
 
     while true; do
         echo -e "\nSelect Python Version:"
@@ -280,11 +301,19 @@ create_new_venv() {
         echo "2. Custom Python Version"
 
         read -p "Enter your choice (1-2): " version_choice
+        
+        if ! [[ "$version_choice" =~ ^[1-2]$ ]]; then
+            echo -e "\033[1;31mInvalid choice. Enter 1 or 2.\033[0m"
+            continue
+        fi
 
         case $version_choice in
             1) 
                 echo -e "\n\033[1;32mUsing system Python...\033[0m"
-                python3 -m venv "$venv_dir/$venv_name"
+                if ! python3 -m venv "$venv_dir/$venv_name"; then
+                    echo "Failed to create venv with system Python."
+                    return 1
+                fi
                 echo "$(python3 --version 2>&1)" > "$venv_dir/$venv_name/.python-version"
                 break
                 ;;
@@ -292,24 +321,26 @@ create_new_venv() {
                 if ! check_conda; then
                     echo -e "\n\033[1;33mConda not found. Specify conda installation directory.\033[0m"
                     
-                    read -p "Enter conda installation directory (or press Enter to return to version selection): " conda_dir
-                    
-                    if [ -z "$conda_dir" ]; then
-                        echo -e "\033[90mReturning to version selection...\033[0m"
-                        continue
-                    fi
-                    
-                    conda_dir="${conda_dir/#\~/$HOME}"
-                    
-                    if [ -x "$conda_dir/bin/conda" ]; then
-                        echo "$conda_dir" > "$CONDA_PATH_FILE"
-                        export PATH="$conda_dir/bin:$PATH"
-                        echo -e "\033[1;32mConda path set successfully!\033[0m"
-                    else
-                        echo -e "\033[1;31mError: Conda executable not found in $conda_dir/bin\033[0m"
-                        echo -e "\033[90mReturning to version selection...\033[0m"
-                        continue
-                    fi
+                    while true; do
+                        read -p "Enter conda installation directory (or press Enter to return to version selection): " conda_dir
+                        
+                        if [ -z "$conda_dir" ]; then
+                            echo -e "\033[90mReturning to version selection...\033[0m"
+                            continue 2
+                        fi
+                        
+                        conda_dir="${conda_dir/#\~/$HOME}"
+                        
+                        if [ -x "$conda_dir/bin/conda" ]; then
+                            echo "$conda_dir" > "$CONDA_PATH_FILE"
+                            export PATH="$conda_dir/bin:$PATH"
+                            echo -e "\033[1;32mConda path set successfully!\033[0m"
+                            break
+                        else
+                            echo -e "\033[1;31mError: Conda executable not found in $conda_dir/bin\033[0m"
+                            echo -e "\033[90mPlease check the directory and try again.\033[0m"
+                        fi
+                    done
                 fi
 
                 while true; do
@@ -340,13 +371,18 @@ create_new_venv() {
                     fi
                 done
                 ;;
-            *)
-                echo -e "\033[1;31mInvalid choice. Enter 1 or 2.\033[0m"
-                ;;
         esac
     done
+
+    echo -e "\n\033[1;32mNew venv created successfully: $venv_name\033[0m"
+    echo "Initializing venv..."
     
-    echo -e "\n\033[1;32mNew venv created: $venv_name\033[0m"
+    # Run a non-interactive command to ensure initialization is complete
+    source "$venv_dir/$venv_name/bin/activate" && deactivate
+    
+    echo -e "\nSetup complete. Returning to manager..."
+    sleep 1
+    return 0
 }
 
 enter_venv() {
