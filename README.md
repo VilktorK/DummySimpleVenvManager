@@ -43,7 +43,7 @@ chmod +x BaseManager.sh
 
 ## Usage
 
-Simpily Run:
+Simply Run:
 ```bash
 ./DummySimpleVenvManager.sh
 ```
