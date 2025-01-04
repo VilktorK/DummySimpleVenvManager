@@ -134,7 +134,7 @@ get_venv_directory() {
 
 
 if ! get_venv_directory > /dev/null; then
-      echo -e "Welcome to \033[1;31mD\033[1;33mu\033[1;32mm\033[1;36mm\033[1;34my \033[1;35mS\033[1;31mi\033[1;33mm\033[1;32mp\033[1;36ml\033[1;34me \033[1;35mV\033[1;31me\033[1;33mn\033[1;32mv \033[1;36mM\033[1;34ma\033[1;35mn\033[1;31ma\033[1;33mg\033[1;32me\033[1;36mr\033[1;34m!\033[0m"
+    echo -e "Welcome to \033[38;2;102;205;170mDummy Simple Venv Manager!\033[0m"
   # echo "You currently have no config directory which means this is likely your first time running the script."
     echo "To start, just enter what directory you want to use to store your Python virtual environment(s) (venv) inside of."
     echo "You can use a pre-existing directory or enter a new one to create it."
@@ -149,6 +149,7 @@ display_options_menu() {
     echo "Options:"
     echo "1. Create a new venv"
     echo "2. Change venv directory"
+    echo "3. Delete a venv"
     echo "0. Back to main menu"
 }
 
@@ -205,6 +206,10 @@ handle_custom_options() {
         2)
             set_venv_directory
             return 0  
+            ;;
+        3)  # New case
+            delete_venv
+            return 2
             ;;
         *)
             echo "Invalid choice"
@@ -285,7 +290,7 @@ create_new_venv() {
                 ;;
             2) 
                 if ! check_conda; then
-                    echo -e "\n\033[1;33mConda not found. Please specify conda installation directory.\033[0m"
+                    echo -e "\n\033[1;33mConda not found. Specify conda installation directory.\033[0m"
                     
                     read -p "Enter conda installation directory (or press Enter to return to version selection): " conda_dir
                     
@@ -331,12 +336,12 @@ create_new_venv() {
                         echo "Python $desired_version (conda)" > "$env_path/.python-version"
                         break 2
                     else
-                        echo -e "\033[1;31mInvalid version format. Please use format like '3.11' or '3.11.0'.\033[0m"
+                        echo -e "\033[1;31mInvalid version format. Use format like '3.11' or '3.11.0'.\033[0m"
                     fi
                 done
                 ;;
             *)
-                echo -e "\033[1;31mInvalid choice. Please enter 1 or 2.\033[0m"
+                echo -e "\033[1;31mInvalid choice. Enter 1 or 2.\033[0m"
                 ;;
         esac
     done
@@ -363,6 +368,82 @@ enter_venv() {
         alias deactivate="command deactivate && exit"
     ')
     cd "$PWD" 
+}
+
+delete_venv() {
+    display_items formatted_venvs
+    read -p "Enter the number of the venv to delete: " delete_choice
+    
+    if [ "$delete_choice" -ge 1 ] && [ "$delete_choice" -le "${#venvs[@]}" ]; then
+        selected_venv="${venvs[$((delete_choice-1))]}"
+        
+        # Safety check 1: Ensure the name doesn't contain dangerous characters
+        if echo "$selected_venv" | grep -q '[/;:|]'; then
+            echo "Error: Venv name contains invalid characters"
+            return 1
+        fi  # Fixed the extra curly brace here
+        
+        # Get venv directory from settings
+        venv_dir=$(get_venv_directory)
+        if [ $? -ne 0 ]; then
+            echo "Error: Could not determine venv directory"
+            return 1
+        fi
+        
+        # Safety check 2: Construct and verify the full path
+        venv_path="$venv_dir/$selected_venv"
+        
+        # Safety check 3: Ensure the path is actually under the venv directory
+        if [[ ! "$(realpath "$venv_path")" =~ ^"$(realpath "$venv_dir")"/ ]]; then
+            echo "Error: Security check failed - path is outside of venv directory"
+            return 1
+        fi
+        
+        # Safety check 4: Verify the directory exists and is a directory
+        if [ ! -d "$venv_path" ]; then
+            echo "Error: Venv directory not found or is not a directory"
+            return 1
+        fi
+        
+        echo "This will:"
+        echo "1. Delete the virtual environment '$selected_venv'"
+        echo "2. Remove the folder '$venv_path'"
+        echo "3. Delete all associated hot commands"
+        read -p "To confirm deletion, Type the name of the venv ($selected_venv): " confirm
+        
+        if [ "$confirm" = "$selected_venv" ]; then
+            # First deactivate if this venv is active
+            if [[ "$VIRTUAL_ENV" == "$venv_path" ]]; then
+                deactivate
+            fi
+            
+            # Safely remove the directory
+            if [ -d "$venv_path" ]; then
+                # Final safety check before removal
+                if [[ "$(realpath "$venv_path")" =~ ^"$(realpath "$venv_dir")"/ ]]; then
+                    rm -rf "$venv_path"
+                    if [ $? -ne 0 ]; then
+                        echo "Error: Failed to remove venv directory"
+                        return 1
+                    fi
+                else
+                    echo "Error: Final security check failed"
+                    return 1
+                fi
+            fi
+            
+            # Remove hot commands
+            local temp_file=$(mktemp)
+            grep -v "^$selected_venv:" "$HOTCMDS_FILE" > "$temp_file"
+            mv "$temp_file" "$HOTCMDS_FILE"
+            
+            echo "Virtual environment $selected_venv and its associated files have been deleted."
+        else
+            echo "Deletion aborted: name did not match."
+        fi
+    else
+        echo "Invalid choice"
+    fi
 }
 
 set_working_directory() {
@@ -464,7 +545,7 @@ while true; do
             read
         else
             echo -e "\033[1;31mError: Documentation file not found.\033[0m"
-            echo -e "Please ensure DOCUMENTATION.md exists in: $SCRIPT_DIR"
+            echo -e "Ensure DOCUMENTATION.md exists in: $SCRIPT_DIR"
             echo -e "\nPress Enter to continue..."
             read
         fi
