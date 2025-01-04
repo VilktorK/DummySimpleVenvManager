@@ -72,8 +72,8 @@ Simpily Run:
    - You can choose whether the venv should execute its hot commands within the working directory
    - This means hot commands that affect certain files within the working directory won't need to include a cd command first
 
-6.  Show launch script:
+5.  Show launch script:
    - Shows the command that will enter the venv and the working directory if one is configured.
 
-5. Config Location:
+6. Config Location:
    - All config files are located in $HOME/.config/dummysimplevenvmanager
