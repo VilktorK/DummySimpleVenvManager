@@ -14,6 +14,70 @@ mkdir -p "$CONFIG_DIR"
 touch "$HOTCMDS_FILE"
 touch "$SETTINGS_FILE"
 
+check_for_updates() {
+    local settings_file="$CONFIG_DIR/settings.cfg"
+    local update_script="$SCRIPT_DIR/update.sh"
+    
+    # Skip update check if settings file doesn't exist (first run)
+    if [ ! -f "$settings_file" ]; then
+        return 0
+    fi
+    
+    # If autoupdate setting doesn't exist in existing settings, create it as enabled
+    if ! grep -q "^AUTOUPDATE=" "$settings_file" 2>/dev/null; then
+        echo "AUTOUPDATE=true" >> "$settings_file"
+    fi
+    
+    # Check if autoupdate is enabled
+    if ! grep -q "^AUTOUPDATE=true$" "$settings_file" 2>/dev/null; then
+        return 0
+    fi
+    
+    # Verify update script exists
+    if [ ! -x "$update_script" ]; then
+        return 0
+    fi
+    
+    # Try to check for updates, redirecting all output to /dev/null
+    if timeout 5s "$update_script" --check-only &>/dev/null; then
+        local update_available=$?
+        
+        if [ $update_available -eq 0 ]; then
+            echo -e "\033[1;33mAn update is available!\033[0m"
+            echo -e "Would you like to update now? [\033[1;32my\033[0m/\033[1;31mn\033[0m/\033[1;34mnever\033[0m]"
+            read -p "> " update_choice
+            
+            case "$update_choice" in
+                [Yy])
+                    if "$update_script"; then
+                        echo "Update completed successfully. Restarting..."
+                        exec "$0" "$@"
+                    else
+                        echo -e "\033[1;31mUpdate failed. Continuing with current version...\033[0m"
+                        sleep 2
+                    fi
+                    ;;
+                [Nn])
+                    echo "Update skipped. Starting normally..."
+                    sleep 1
+                    ;;
+                [Nn][Ee][Vv][Ee][Rr])
+                    echo "AUTOUPDATE=false" > "$settings_file"
+                    # Preserve other settings by appending them back
+                    grep -v "^AUTOUPDATE=" "$settings_file.tmp" >> "$settings_file"
+                    echo "Auto-updates disabled. Starting normally..."
+                    sleep 1
+                    ;;
+                *)
+                    echo "Invalid choice. Starting normally..."
+                    sleep 1
+                    ;;
+            esac
+        fi
+    fi
+}
+
+
 check_conda() {
     if command -v conda >/dev/null 2>&1; then
         return 0
@@ -135,13 +199,15 @@ get_venv_directory() {
 
 if ! get_venv_directory > /dev/null; then
     echo -e "Welcome to \033[38;2;102;205;170mDummy Simple Venv Manager!\033[0m"
-  # echo "You currently have no config directory which means this is likely your first time running the script."
     echo "To start, just enter what directory you want to use to store your Python virtual environment(s) (venv) inside of."
-    echo "You can use a pre-existing directory or enter a new one to create it."
+    echo "You can use a pre-existing directory if you have used this script before or enter a new one to create it."
     if ! set_venv_directory; then
         echo "No venv directory set. Exiting..."
         exit 1
     fi
+else
+    # Only check for updates on subsequent runs
+    check_for_updates
 fi
 
 
