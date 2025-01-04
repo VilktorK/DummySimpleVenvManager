@@ -434,40 +434,6 @@ execute_hot_command() {
 }
 
 # Main Loop
-show_help() {
-    clear
-    echo -e "\033[1;36m========================================\033[0m"
-    echo -e "\033[1;31mD\033[1;33mu\033[1;32mm\033[1;36mm\033[1;34my \033[1;35mS\033[1;31mi\033[1;33mm\033[1;32mp\033[1;36ml\033[1;34me \033[1;35mV\033[1;31me\033[1;33mn\033[1;32mv \033[1;36mM\033[1;34ma\033[1;35mn\033[1;31ma\033[1;33mg\033[1;32me\033[1;36mr\033[1;34m!\033[0m"
-    echo -e "\033[1;36m========================================\033[0m"
-    echo -e "\n\033[1;32mGetting Started:\033[0m"
-    echo -e "\033[1;37m1. Create a new virtual environment:\033[0m"
-    echo "   - Select '0' for Options."
-    echo "   - Choose '1' to create a new venv."
-    echo "   - Select '1' to use the version of python that your system has installed or type '2' to use conda to install a custom version of python if you have conda installed."
-     echo "   - You can specify your conda directory when selecting '1' for the first time."
-    echo "   - Venvs that are created with either methods are static and wont update."
-    echo "   - I'll simplify the process of installing conda soon."
-    
-    
-    echo -e "\n\033[1;37m2. Managing virtual environments:\033[0m"
-    echo "   - Select a venv by its number from the main menu"
-    echo "   - Enter the venv to activate it"
-    
-    echo -e "\n\033[1;37m3. Using Hot Commands:\033[0m"
-    echo "   - Hot commands are customizable commands can be executed with the press of their associated number. This saves the work of typing or remembering commonly used commands within the venv."
-    
-    echo -e "\n\033[1;37m4. Setting a Working Directory:\033[0m"
-    echo "   - The working directory is where the directory that the venv will start in when the venv is entered with this script. This is useful for venvs that operate within a specific directory"
-    echo "   - You can also choose whether the venv should execute its hot commands within the working directory meaning hot commands that effect certain files within the working directory will not have to include a cd into that directory first."
-    
-        echo -e "\n\033[1;37m5. Config Location:\033[0m"
-        echo "   - All config files are located in $HOME/.config/dummysimplevenvmanager"
-    
-    echo -e "\n\033[1;36mPress Enter to return to the previous menu...\033[0m"
-    read
-}
-
-# Modify the main loop to check for 'help':
 while true; do
     venv_dir=$(get_venv_directory)
     if [ $? -ne 0 ]; then
@@ -491,7 +457,17 @@ while true; do
     if [ -z "$choice" ]; then
         continue
     elif [ "$choice" = "help" ]; then
-        show_help
+        clear
+        if [ -f "$SCRIPT_DIR/DOCUMENTATION.md" ]; then
+            cat "$SCRIPT_DIR/DOCUMENTATION.md"
+            echo -e "\n\033[1;36mPress Enter to return to the previous menu...\033[0m"
+            read
+        else
+            echo -e "\033[1;31mError: Documentation file not found.\033[0m"
+            echo -e "Please ensure DOCUMENTATION.md exists in: $SCRIPT_DIR"
+            echo -e "\nPress Enter to continue..."
+            read
+        fi
         continue
     elif [ "$choice" -eq 0 ]; then
         handle_options_menu
