@@ -7,22 +7,25 @@ TEMP_DIR=$(mktemp -d)
 SCRIPT_DIR="$(dirname "$(readlink -f "$0")")"
 LAST_COMMIT_FILE="$SCRIPT_DIR/.last_commit"
 
+# Color codes
+BLUE='\033[0;34m'
+RED='\033[0;31m'
+NC='\033[0m' # No Color
+
 echo "Starting update process..."
 
 # Cleanup function to remove temporary directory
 cleanup() {
     echo "Cleaning up temporary files..."
     rm -rf "$TEMP_DIR"
+}
+
+# Function to wait for user input before exit
+wait_for_exit() {
     echo ""
     echo "Press Enter to exit..."
     read -r
-}
-
-# Function to handle script exit
-exit_script() {
-    local exit_code=$1
-    cleanup
-    exit "$exit_code"
+    exit 0
 }
 
 # Register cleanup function to run on script exit
@@ -41,12 +44,12 @@ if [ -f "$LAST_COMMIT_FILE" ]; then
     LAST_COMMIT=$(cat "$LAST_COMMIT_FILE")
     
     if [ "$REMOTE_COMMIT" = "$LAST_COMMIT" ]; then
-        echo "No new commits detected. Already up to date!"
-        exit_script 0
+        echo -e "${RED}No new commits detected. Already up to date!${NC}"
+        wait_for_exit
     fi
 fi
 
-echo "New updates detected. Proceeding with update..."
+echo -e "${BLUE}New updates detected. Proceeding with update...${NC}"
 
 # Clone repository to temporary directory
 echo "Cloning repository to temporary directory..."
@@ -69,5 +72,5 @@ echo "Making scripts executable..."
 chmod +x "$SCRIPT_DIR"/*.sh
 
 echo "Update complete!"
-echo "You may need to restart any running instances of the manager for changes to take effect."
-exit_script 0
+echo "You will need to relaunch any running instances of the manager for changes to take effect."
+wait_for_exit
