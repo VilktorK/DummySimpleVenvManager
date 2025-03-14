@@ -9,10 +9,12 @@ CONFIG_DIR="$HOME/.config/dummysimplevenvmanager"
 HOTCMDS_FILE="$CONFIG_DIR/venvhotcmds.cfg"
 SETTINGS_FILE="$CONFIG_DIR/settings.cfg"
 CONDA_PATH_FILE="$CONFIG_DIR/condapath.cfg"
+STARTUP_CMDS_FILE="$CONFIG_DIR/startup_commands.cfg"
 
 mkdir -p "$CONFIG_DIR"
 touch "$HOTCMDS_FILE"
 touch "$SETTINGS_FILE"
+touch "$STARTUP_CMDS_FILE"
 
 check_conda() {
     if command -v conda >/dev/null 2>&1; then
@@ -74,8 +76,6 @@ get_venv_python_version() {
     echo "$version"
 }
 
-
-
 ensure_python_version() {
     local version="$1"
     local install_dir="$2"
@@ -93,7 +93,6 @@ ensure_python_version() {
     
     return 0
 }
-
 
 set_venv_directory() {
     while true; do
@@ -120,7 +119,6 @@ set_venv_directory() {
     return 0
 }
 
-
 get_venv_directory() {
     if [ -f "$SETTINGS_FILE" ]; then
         local venv_dir=$(grep "^VENV_DIR=" "$SETTINGS_FILE" | cut -d= -f2)
@@ -132,6 +130,94 @@ get_venv_directory() {
     return 1
 }
 
+# Function to manage startup commands
+manage_startup_commands() {
+    echo -e "\n\033[1;36mManage Venv Startup Commands\033[0m"
+    echo "These commands will run automatically when a venv is activated"
+    echo -e "\033[90m----------------------------------------\033[0m"
+    
+    if [ -s "$STARTUP_CMDS_FILE" ]; then
+        echo "Current startup commands:"
+        local i=1
+        while IFS= read -r cmd; do
+            cmd_color_code=$(generate_color_code "$cmd")
+            printf "%b%d. %s\033[0m\n" "$cmd_color_code" "$i" "$cmd"
+            i=$((i+1))
+        done < "$STARTUP_CMDS_FILE"
+    else
+        echo "No startup commands configured."
+    fi
+    
+    echo -e "\n1. Add startup command"
+    echo "2. Remove startup command"
+    echo "0. Return to options"
+    
+    read -p "Enter your choice: " cmd_option
+    case $cmd_option in
+        1)
+            add_startup_command
+            ;;
+        2)
+            remove_startup_command
+            ;;
+        0)
+            return
+            ;;
+        *)
+            echo "Invalid choice"
+            ;;
+    esac
+}
+
+add_startup_command() {
+    read -p "Enter the command to run at venv activation: " new_cmd
+    
+    if [ -z "$new_cmd" ]; then
+        echo "Operation cancelled."
+        return
+    fi
+    
+    echo "$new_cmd" >> "$STARTUP_CMDS_FILE"
+    echo -e "\033[1;32mStartup command added successfully.\033[0m"
+    echo "Press Enter to continue..."
+    read
+}
+
+remove_startup_command() {
+    if [ ! -s "$STARTUP_CMDS_FILE" ]; then
+        echo "No startup commands to remove."
+        echo "Press Enter to continue..."
+        read
+        return
+    fi
+    
+    echo "Select a command to remove:"
+    mapfile -t cmds < "$STARTUP_CMDS_FILE"
+    
+    for i in "${!cmds[@]}"; do
+        cmd_color_code=$(generate_color_code "${cmds[$i]}")
+        printf "%b%d. %s\033[0m\n" "$cmd_color_code" "$((i+1))" "${cmds[$i]}"
+    done
+    
+    read -p "Enter command number to remove (or press Enter to cancel): " remove_num
+    
+    if [ -z "$remove_num" ]; then
+        echo "Operation cancelled."
+        return
+    fi
+    
+    if [[ "$remove_num" =~ ^[0-9]+$ ]] && [ "$remove_num" -ge 1 ] && [ "$remove_num" -le "${#cmds[@]}" ]; then
+        temp_file=$(mktemp)
+        sed "$remove_num d" "$STARTUP_CMDS_FILE" > "$temp_file"
+        mv "$temp_file" "$STARTUP_CMDS_FILE"
+        echo -e "\033[1;32mStartup command removed successfully.\033[0m"
+    else
+        echo "Invalid selection."
+    fi
+    
+    echo "Press Enter to continue..."
+    read
+}
 
 if ! get_venv_directory > /dev/null; then
     echo -e "Welcome to \033[38;2;102;205;170mDummy Simple Venv Manager!\033[0m"
@@ -144,14 +230,13 @@ if ! get_venv_directory > /dev/null; then
     fi
 fi
 
-
 display_options_menu() {
     echo "Options:"
     echo "1. Create a new venv"
     echo "2. Delete a venv"
+    echo "3. Manage startup commands"
     echo "0. Back to main menu"
 }
-
 
 show_venv_info() {
     local venv_path="$1"
@@ -162,11 +247,10 @@ show_venv_info() {
         echo "Using Conda-installed Python from: $(cat "$venv_path/.conda-path")"
     fi
     echo "Location: $venv_path"
-    if [ -f "${venv_path}working_directory.cfg" ]; then
-        echo "Working Directory: $(cat "${venv_path}working_directory.cfg")"
+    if [ -f "${venv_path}/working_directory.cfg" ]; then
+        echo "Working Directory: $(cat "${venv_path}/working_directory.cfg")"
     fi
 }
-
 
 display_options_and_commands() {
     local venv_name="$1"
@@ -194,7 +278,6 @@ display_options_and_commands() {
     fi
 }
 
-
 handle_custom_options() {
     local option_choice="$1"
     case $option_choice in
@@ -206,13 +289,16 @@ handle_custom_options() {
             delete_venv
             return 2
             ;;
+        3)
+            manage_startup_commands
+            return 2
+            ;;
         *)
             echo "Invalid choice"
             return 0
             ;;
     esac
 }
-
 
 handle_option() {
     local venv_name="$1"
@@ -384,21 +470,141 @@ enter_venv() {
     local venv_name="$1"
     local venv_path="$2"
     
-    source "${venv_path}/bin/activate"
-    if [ -f "${venv_path}working_directory.cfg" ]; then
-        working_dir=$(cat "${venv_path}working_directory.cfg")
+    # Create a temporary activation script with startup commands
+    local temp_script=$(mktemp)
+    
+    # Write the basic activation
+    cat > "$temp_script" << EOF
+#!/bin/bash
+# Auto-generated venv activation script
+source "${venv_path}/bin/activate"
+
+EOF
+    
+    # Add startup commands if they exist
+    if [ -s "$STARTUP_CMDS_FILE" ]; then
+        echo "# Run configured startup commands" >> "$temp_script"
+        cat "$STARTUP_CMDS_FILE" >> "$temp_script"
+        echo "" >> "$temp_script"
+    fi
+    
+    # Add working directory change if configured
+    if [ -f "${venv_path}/working_directory.cfg" ]; then
+        working_dir=$(cat "${venv_path}/working_directory.cfg")
         if [ -n "$working_dir" ] && [ -d "$working_dir" ]; then
-            cd "$working_dir"
+            echo "# Change to configured working directory" >> "$temp_script"
+            echo "cd \"$working_dir\"" >> "$temp_script"
+            echo "" >> "$temp_script"
         fi
     fi
+    
+    # Set custom prompt and finalize script
+    cat >> "$temp_script" << EOF
+# Set custom prompt
+PS1="($venv_name) \[\033[01;32m\]\u@\h\[\033[00m\]:\[\033[01;34m\]\w\[\033[00m\]\$ "
+
+# Override deactivate to exit shell when done
+alias deactivate="command deactivate && exit"
+
+# Start interactive shell
+exec bash
+EOF
+    
+    chmod +x "$temp_script"
+    
+    # Activate and show info
     color_code=$(generate_color_code "$venv_name")
-    echo -e "${color_code}Activated venv: $venv_name\033[0m"
-    bash --init-file <(echo '
-        source "'${venv_path}'/bin/activate"
-        PS1="('$venv_name') \[\033[01;32m\]\u@\h\[\033[00m\]:\[\033[01;34m\]\w\[\033[00m\]\$ "
-        alias deactivate="command deactivate && exit"
-    ')
-    cd "$PWD" 
+    echo -e "${color_code}Activating venv: $venv_name\033[0m"
+    
+    if [ -s "$STARTUP_CMDS_FILE" ]; then
+        echo -e "\033[90mRunning startup commands...\033[0m"
+    fi
+    
+    # Execute the script
+    bash "$temp_script"
+    
+    # Clean up
+    rm "$temp_script"
+    
+    # Return to current directory after shell exits
+    cd "$PWD"
+}
+
+set_working_directory() {
+    local venv_path="$1"
+    read -p "Enter the working directory (leave blank to clear): " working_dir
+    if [ -n "$working_dir" ]; then
+        echo "$working_dir" > "${venv_path}/working_directory.cfg"
+        echo "Working directory set to: $working_dir"
+        
+        read -p "Execute hot commands in this working directory? (yes/no): " use_working_dir
+        echo "$use_working_dir" > "${venv_path}/use_working_dir_for_hot_commands.cfg"
+        echo "Hot commands will $([ "$use_working_dir" = "yes" ] && echo "be executed" || echo "not be executed") in the working directory."
+    else
+        rm -f "${venv_path}/working_directory.cfg"
+        rm -f "${venv_path}/use_working_dir_for_hot_commands.cfg"
+        echo "Working directory cleared"
+    fi
+}
+
+show_launch_script() {
+    local venv_name="$1"
+    local venv_path="$2"
+    local working_dir=""
+    if [ -f "${venv_path}/working_directory.cfg" ]; then
+        working_dir=$(cat "${venv_path}/working_directory.cfg")
+    fi
+    
+    echo "Launch script:"
+    if [ -n "$working_dir" ]; then
+        echo "cd '$working_dir' && source '${venv_path}/bin/activate' && bash"
+    else
+        echo "source '${venv_path}/bin/activate' && bash"
+    fi
+    echo ""
+    echo "You can use this line to create a shortcut or assign it to a macro."
+    echo "Press Enter to continue..."
+    read
+}
+
+execute_hot_command() {
+    local venv_name="$1"
+    local command_num="$2"
+    local venv_path="$3"
+    local command=$(grep "^$venv_name:" "$HOTCMDS_FILE" | sed -n "${command_num}p" | cut -d: -f2-)
+    
+    if [ -n "$command" ]; then
+        source "${venv_path}/bin/activate"
+        
+        # Execute startup commands if they exist
+        if [ -s "$STARTUP_CMDS_FILE" ]; then
+            while IFS= read -r startup_cmd; do
+                eval "$startup_cmd"
+            done < "$STARTUP_CMDS_FILE"
+        fi
+        
+        # Set working directory if configured
+        if [ -f "${venv_path}/working_directory.cfg" ]; then
+            working_dir=$(cat "${venv_path}/working_directory.cfg")
+            use_working_dir=$(cat "${venv_path}/use_working_dir_for_hot_commands.cfg" 2>/dev/null || echo "no")
+            if [ -n "$working_dir" ] && [ -d "$working_dir" ] && [ "$use_working_dir" = "yes" ]; then
+                pushd "$working_dir" > /dev/null
+                eval "$command"
+                popd > /dev/null
+            else
+                eval "$command"
+            fi
+        else
+            eval "$command"
+        fi
+        deactivate
+        echo "Hot command executed. Press Enter to continue..."
+        read
+    else
+        echo "Invalid hot command number."
+        echo "Press Enter to continue..."
+        read
+    fi
 }
 
 delete_venv() {
@@ -412,7 +618,7 @@ delete_venv() {
         if echo "$selected_venv" | grep -q '[/;:|]'; then
             echo "Error: Venv name contains invalid characters"
             return 1
-        fi  # Fixed the extra curly brace here
+        fi
         
         # Get venv directory from settings
         venv_dir=$(get_venv_directory)
@@ -474,74 +680,6 @@ delete_venv() {
         fi
     else
         echo "Invalid choice"
-    fi
-}
-
-set_working_directory() {
-    local venv_path="$1"
-    read -p "Enter the working directory (leave blank to clear): " working_dir
-    if [ -n "$working_dir" ]; then
-        echo "$working_dir" > "${venv_path}working_directory.cfg"
-        echo "Working directory set to: $working_dir"
-        
-        read -p "Execute hot commands in this working directory? (yes/no): " use_working_dir
-        echo "$use_working_dir" > "${venv_path}use_working_dir_for_hot_commands.cfg"
-        echo "Hot commands will $([ "$use_working_dir" = "yes" ] && echo "be executed" || echo "not be executed") in the working directory."
-    else
-        rm -f "${venv_path}working_directory.cfg"
-        rm -f "${venv_path}use_working_dir_for_hot_commands.cfg"
-        echo "Working directory cleared"
-    fi
-}
-
-show_launch_script() {
-    local venv_name="$1"
-    local venv_path="$2"
-    local working_dir=""
-    if [ -f "${venv_path}working_directory.cfg" ]; then
-        working_dir=$(cat "${venv_path}working_directory.cfg")
-    fi
-    
-    echo "Launch script:"
-    if [ -n "$working_dir" ]; then
-        echo "cd '$working_dir' && source '${venv_path}/bin/activate' && bash"
-    else
-        echo "source '${venv_path}/bin/activate' && bash"
-    fi
-    echo ""
-    echo "You can use this line to create a shortcut or assign it to a macro."
-    echo "Press Enter to continue..."
-    read
-}
-
-execute_hot_command() {
-    local venv_name="$1"
-    local command_num="$2"
-    local venv_path="$3"
-    local command=$(grep "^$venv_name:" "$HOTCMDS_FILE" | sed -n "${command_num}p" | cut -d: -f2-)
-    
-    if [ -n "$command" ]; then
-        source "${venv_path}/bin/activate"
-        if [ -f "${venv_path}working_directory.cfg" ]; then
-            working_dir=$(cat "${venv_path}working_directory.cfg")
-            use_working_dir=$(cat "${venv_path}use_working_dir_for_hot_commands.cfg")
-            if [ -n "$working_dir" ] && [ -d "$working_dir" ] && [ "$use_working_dir" = "yes" ]; then
-                pushd "$working_dir" > /dev/null
-                eval "$command"
-                popd > /dev/null
-            else
-                eval "$command"
-            fi
-        else
-            eval "$command"
-        fi
-        deactivate
-        echo "Hot command executed. Press Enter to continue..."
-        read
-    else
-        echo "Invalid hot command number."
-        echo "Press Enter to continue..."
-        read
     fi
 }
 
