@@ -9,6 +9,7 @@ A dummy simple BASH script that simplifies the process of creating and using Pyt
 - Optional Conda integration for creating venvs on specific versions of python.
 - "Hot Commands" for easily executing commands inside of the venv without having to type or memorize them.
 - "Working Directory" to always open the venv inside of a specific directory for less "cd"ing.
+- "Startup Commands" that can be executed automatically when a venv is activated.
 
 ## Requirements
 
