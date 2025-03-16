@@ -9,7 +9,7 @@ CONFIG_DIR="$HOME/.config/dummysimplevenvmanager"
 HOTCMDS_FILE="$CONFIG_DIR/venvhotcmds.cfg"
 SETTINGS_FILE="$CONFIG_DIR/settings.cfg"
 CONDA_PATH_FILE="$CONFIG_DIR/condapath.cfg"
-STARTUP_CMDS_FILE="$CONFIG_DIR/startup_commands.cfg"
+STARTUP_CMDS_FILE="$CONFIG_DIR/global_startup_commands.cfg"
 
 mkdir -p "$CONFIG_DIR"
 touch "$HOTCMDS_FILE"
@@ -20,7 +20,7 @@ check_conda() {
     if command -v conda >/dev/null 2>&1; then
         return 0
     fi
-    
+
     if [ -f "$CONDA_PATH_FILE" ]; then
         local saved_path=$(cat "$CONDA_PATH_FILE")
         if [ -x "$saved_path/bin/conda" ]; then
@@ -28,22 +28,22 @@ check_conda() {
             return 0
         fi
     fi
-    
+
     return 1
 }
 
 set_conda_path() {
     echo -e "\n\033[1;33mConda not found in PATH. Would you like to specify its location?\033[0m"
-    
+
     read -p "Enter conda installation directory (or press Enter when blank to return): " conda_dir
-    
+
     if [ -z "$conda_dir" ]; then
         echo -e "\033[90mReturning to previous menu.\033[0m"
         return 1
     fi
-    
+
     conda_dir="${conda_dir/#\~/$HOME}"
-    
+
     if [ -x "$conda_dir/bin/conda" ]; then
         echo "$conda_dir" > "$CONDA_PATH_FILE"
         export PATH="$conda_dir/bin:$PATH"
@@ -64,7 +64,7 @@ get_conda_python_versions() {
 get_venv_python_version() {
     local venv_path="$1"
     local version=""
-    
+
     if [ -f "$venv_path/.python-version" ]; then
         version=$(cat "$venv_path/.python-version")
     elif [ -f "$venv_path/bin/python" ]; then
@@ -72,14 +72,14 @@ get_venv_python_version() {
     else
         version="Unknown"
     fi
-    
+
     echo "$version"
 }
 
 ensure_python_version() {
     local version="$1"
     local install_dir="$2"
-    
+
     if ! check_conda; then
         if ! set_conda_path; then
             return 1
@@ -90,7 +90,7 @@ ensure_python_version() {
         echo "Error: Failed to install Python $version"
         return 1
     fi
-    
+
     return 0
 }
 
@@ -135,7 +135,7 @@ manage_startup_commands() {
     echo -e "\n\033[1;36mManage Venv Startup Commands\033[0m"
     echo "These commands will run automatically when a venv is activated"
     echo -e "\033[90m----------------------------------------\033[0m"
-    
+
     if [ -s "$STARTUP_CMDS_FILE" ]; then
         echo "Current startup commands:"
         local i=1
@@ -147,11 +147,11 @@ manage_startup_commands() {
     else
         echo "No startup commands configured."
     fi
-    
+
     echo -e "\n1. Add startup command"
     echo "2. Remove startup command"
     echo "0. Return to options"
-    
+
     read -p "Enter your choice: " cmd_option
     case $cmd_option in
         1)
@@ -171,12 +171,12 @@ manage_startup_commands() {
 
 add_startup_command() {
     read -p "Enter the command to run at venv activation: " new_cmd
-    
+
     if [ -z "$new_cmd" ]; then
         echo "Operation cancelled."
         return
     fi
-    
+
     echo "$new_cmd" >> "$STARTUP_CMDS_FILE"
     echo -e "\033[1;32mStartup command added successfully.\033[0m"
     echo "Press Enter to continue..."
@@ -190,22 +190,22 @@ remove_startup_command() {
         read
         return
     fi
-    
+
     echo "Select a command to remove:"
     mapfile -t cmds < "$STARTUP_CMDS_FILE"
-    
+
     for i in "${!cmds[@]}"; do
         cmd_color_code=$(generate_color_code "${cmds[$i]}")
         printf "%b%d. %s\033[0m\n" "$cmd_color_code" "$((i+1))" "${cmds[$i]}"
     done
-    
+
     read -p "Enter command number to remove (or press Enter to cancel): " remove_num
-    
+
     if [ -z "$remove_num" ]; then
         echo "Operation cancelled."
         return
     fi
-    
+
     if [[ "$remove_num" =~ ^[0-9]+$ ]] && [ "$remove_num" -ge 1 ] && [ "$remove_num" -le "${#cmds[@]}" ]; then
         temp_file=$(mktemp)
         sed "$remove_num d" "$STARTUP_CMDS_FILE" > "$temp_file"
@@ -214,7 +214,7 @@ remove_startup_command() {
     else
         echo "Invalid selection."
     fi
-    
+
     echo "Press Enter to continue..."
     read
 }
@@ -283,7 +283,7 @@ handle_custom_options() {
     case $option_choice in
         1)
             create_new_venv
-            return 2  
+            return 2
             ;;
         2)
             delete_venv
@@ -304,11 +304,11 @@ handle_option() {
     local venv_name="$1"
     local option="$2"
     local venv_path="$3"
-    
+
     case $option in
         1)
             enter_venv "$venv_name" "$venv_path"
-            return 2 
+            return 2
             ;;
         2)
             echo "1. Add hot command"
@@ -330,7 +330,7 @@ handle_option() {
             show_launch_script "$venv_name" "$venv_path"
             ;;
         0)
-            return 2 
+            return 2
             ;;
         *)
             if [ "$option" -gt 4 ]; then
@@ -382,14 +382,14 @@ create_new_venv() {
         echo "2. Custom Python Version"
 
         read -p "Enter your choice (1-2): " version_choice
-        
+
         if ! [[ "$version_choice" =~ ^[1-2]$ ]]; then
             echo -e "\033[1;31mInvalid choice. Enter 1 or 2.\033[0m"
             continue
         fi
 
         case $version_choice in
-            1) 
+            1)
                 echo -e "\n\033[1;32mUsing system Python...\033[0m"
                 if ! python3 -m venv "$venv_dir/$venv_name"; then
                     echo "Failed to create venv with system Python."
@@ -398,20 +398,20 @@ create_new_venv() {
                 echo "$(python3 --version 2>&1)" > "$venv_dir/$venv_name/.python-version"
                 break
                 ;;
-            2) 
+            2)
                 if ! check_conda; then
                     echo -e "\n\033[1;33mConda not found. Specify conda installation directory.\033[0m"
-                    
+
                     while true; do
                         read -p "Enter conda installation directory (or press Enter to return to version selection): " conda_dir
-                        
+
                         if [ -z "$conda_dir" ]; then
                             echo -e "\033[90mReturning to version selection...\033[0m"
                             continue 2
                         fi
-                        
+
                         conda_dir="${conda_dir/#\~/$HOME}"
-                        
+
                         if [ -x "$conda_dir/bin/conda" ]; then
                             echo "$conda_dir" > "$CONDA_PATH_FILE"
                             export PATH="$conda_dir/bin:$PATH"
@@ -438,13 +438,13 @@ create_new_venv() {
 
                     if [[ "$desired_version" =~ ^[0-9]+\.[0-9]+(\.[0-9]+)?$ ]]; then
                         local env_path="$venv_dir/$venv_name"
-                        
+
                         echo -e "\n\033[1;32mCreating environment with Python $desired_version...\033[0m"
                         if ! conda create -y -p "$env_path" python="$desired_version"; then
                             echo -e "\033[1;31mFailed to create environment with Python $desired_version.\033[0m"
                             continue
                         fi
-                        
+
                         echo "Python $desired_version (conda)" > "$env_path/.python-version"
                         break 2
                     else
@@ -457,10 +457,10 @@ create_new_venv() {
 
     echo -e "\n\033[1;32mNew venv created successfully: $venv_name\033[0m"
     echo "Initializing venv..."
-    
+
     # Run a non-interactive command to ensure initialization is complete
     source "$venv_dir/$venv_name/bin/activate" && deactivate
-    
+
     echo -e "\nSetup complete. Returning to manager..."
     sleep 1
     return 0
@@ -469,10 +469,10 @@ create_new_venv() {
 enter_venv() {
     local venv_name="$1"
     local venv_path="$2"
-    
+
     # Create a temporary activation script with startup commands
     local temp_script=$(mktemp)
-    
+
     # Write the basic activation
     cat > "$temp_script" << EOF
 #!/bin/bash
@@ -480,14 +480,14 @@ enter_venv() {
 source "${venv_path}/bin/activate"
 
 EOF
-    
+
     # Add startup commands if they exist
     if [ -s "$STARTUP_CMDS_FILE" ]; then
         echo "# Run configured startup commands" >> "$temp_script"
         cat "$STARTUP_CMDS_FILE" >> "$temp_script"
         echo "" >> "$temp_script"
     fi
-    
+
     # Add working directory change if configured
     if [ -f "${venv_path}/working_directory.cfg" ]; then
         working_dir=$(cat "${venv_path}/working_directory.cfg")
@@ -497,7 +497,7 @@ EOF
             echo "" >> "$temp_script"
         fi
     fi
-    
+
     # Set custom prompt and finalize script
     cat >> "$temp_script" << EOF
 # Set custom prompt
@@ -509,23 +509,23 @@ alias deactivate="command deactivate && exit"
 # Start interactive shell
 exec bash
 EOF
-    
+
     chmod +x "$temp_script"
-    
+
     # Activate and show info
     color_code=$(generate_color_code "$venv_name")
     echo -e "${color_code}Activating venv: $venv_name\033[0m"
-    
+
     if [ -s "$STARTUP_CMDS_FILE" ]; then
         echo -e "\033[90mRunning startup commands...\033[0m"
     fi
-    
+
     # Execute the script
     bash "$temp_script"
-    
+
     # Clean up
     rm "$temp_script"
-    
+
     # Return to current directory after shell exits
     cd "$PWD"
 }
@@ -536,7 +536,7 @@ set_working_directory() {
     if [ -n "$working_dir" ]; then
         echo "$working_dir" > "${venv_path}/working_directory.cfg"
         echo "Working directory set to: $working_dir"
-        
+
         read -p "Execute hot commands in this working directory? (yes/no): " use_working_dir
         echo "$use_working_dir" > "${venv_path}/use_working_dir_for_hot_commands.cfg"
         echo "Hot commands will $([ "$use_working_dir" = "yes" ] && echo "be executed" || echo "not be executed") in the working directory."
@@ -554,7 +554,7 @@ show_launch_script() {
     if [ -f "${venv_path}/working_directory.cfg" ]; then
         working_dir=$(cat "${venv_path}/working_directory.cfg")
     fi
-    
+
     echo "Launch script:"
     if [ -n "$working_dir" ]; then
         echo "cd '$working_dir' && source '${venv_path}/bin/activate' && bash"
@@ -572,17 +572,17 @@ execute_hot_command() {
     local command_num="$2"
     local venv_path="$3"
     local command=$(grep "^$venv_name:" "$HOTCMDS_FILE" | sed -n "${command_num}p" | cut -d: -f2-)
-    
+
     if [ -n "$command" ]; then
         source "${venv_path}/bin/activate"
-        
+
         # Execute startup commands if they exist
         if [ -s "$STARTUP_CMDS_FILE" ]; then
             while IFS= read -r startup_cmd; do
                 eval "$startup_cmd"
             done < "$STARTUP_CMDS_FILE"
         fi
-        
+
         # Set working directory if configured
         if [ -f "${venv_path}/working_directory.cfg" ]; then
             working_dir=$(cat "${venv_path}/working_directory.cfg")
@@ -610,50 +610,50 @@ execute_hot_command() {
 delete_venv() {
     display_items formatted_venvs
     read -p "Enter the number of the venv to delete: " delete_choice
-    
+
     if [ "$delete_choice" -ge 1 ] && [ "$delete_choice" -le "${#venvs[@]}" ]; then
         selected_venv="${venvs[$((delete_choice-1))]}"
-        
+
         # Safety check 1: Ensure the name doesn't contain dangerous characters
         if echo "$selected_venv" | grep -q '[/;:|]'; then
             echo "Error: Venv name contains invalid characters"
             return 1
         fi
-        
+
         # Get venv directory from settings
         venv_dir=$(get_venv_directory)
         if [ $? -ne 0 ]; then
             echo "Error: Could not determine venv directory"
             return 1
         fi
-        
+
         # Safety check 2: Construct and verify the full path
         venv_path="$venv_dir/$selected_venv"
-        
+
         # Safety check 3: Ensure the path is actually under the venv directory
         if [[ ! "$(realpath "$venv_path")" =~ ^"$(realpath "$venv_dir")"/ ]]; then
             echo "Error: Security check failed - path is outside of venv directory"
             return 1
         fi
-        
+
         # Safety check 4: Verify the directory exists and is a directory
         if [ ! -d "$venv_path" ]; then
             echo "Error: Venv directory not found or is not a directory"
             return 1
         fi
-        
+
         echo "This will:"
         echo "1. Delete the virtual environment '$selected_venv'"
         echo "2. Remove the folder '$venv_path'"
         echo "3. Delete all associated hot commands"
         read -p "To confirm deletion, Type the name of the venv ($selected_venv): " confirm
-        
+
         if [ "$confirm" = "$selected_venv" ]; then
             # First deactivate if this venv is active
             if [[ "$VIRTUAL_ENV" == "$venv_path" ]]; then
                 deactivate
             fi
-            
+
             # Safely remove the directory
             if [ -d "$venv_path" ]; then
                 # Final safety check before removal
@@ -668,12 +668,12 @@ delete_venv() {
                     return 1
                 fi
             fi
-            
+
             # Remove hot commands
             local temp_file=$(mktemp)
             grep -v "^$selected_venv:" "$HOTCMDS_FILE" > "$temp_file"
             mv "$temp_file" "$HOTCMDS_FILE"
-            
+
             echo "Virtual environment $selected_venv and its associated files have been deleted."
         else
             echo "Deletion aborted: name did not match."
@@ -690,7 +690,7 @@ while true; do
         echo "Error: Could not determine venv directory."
         exit 1
     fi
-    
+
     venvs=($(find "$venv_dir" -maxdepth 1 -type d -printf "%f\n" | sort))
     venvs=(${venvs[@]/"$(basename "$venv_dir")"/})
     venvs=(${venvs[@]/*.conda/})
@@ -722,10 +722,10 @@ while true; do
     elif [ "$choice" -eq 0 ]; then
         handle_options_menu
         if [ $? -eq 2 ]; then
-            continue 
+            continue
         fi
     elif [ "$choice" -ge 1 ] && [ "$choice" -le "${#venvs[@]}" ]; then
-        selected_venv="${venvs[$((choice-1))]}" 
+        selected_venv="${venvs[$((choice-1))]}"
         venv_path="$venv_dir/$selected_venv"
         manage_item "$selected_venv" "$venv_path"
     else
