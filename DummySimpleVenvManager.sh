@@ -456,8 +456,7 @@ handle_option() {
             ;;
         *)
             if [ "$option" -gt 5 ]; then
-                hot_cmd_num=$((option - 5))
-                execute_hot_command "$venv_name" "$hot_cmd_num" "$venv_path"
+            execute_hot_command "$venv_name" "$option" "$venv_path"
             else
                 echo "Invalid choice"
                 echo "Press Enter to continue..."
@@ -762,20 +761,30 @@ execute_hot_command() {
     local command_num="$2"
     local venv_path="$3"
 
+    # echo "Debug: venv_name=$venv_name, command_num=$command_num, CONTAINER_MENU_ITEMS=$CONTAINER_MENU_ITEMS"
+
     # Get all hot commands for this venv
     local hot_cmds=()
     while IFS= read -r line; do
         if [[ "$line" == "$venv_name:"* ]]; then
             hot_cmds+=("${line#*:}")
+
+            # echo "Debug: Added hot command: ${line#*:}"
         fi
     done < "$HOTCMDS_FILE"
+
+    # echo "Debug: Total hot commands found: ${#hot_cmds[@]}"
 
     # Convert the menu number to array index using the global CONTAINER_MENU_ITEMS
     local array_index=$((command_num - $CONTAINER_MENU_ITEMS))
 
+    # echo "Debug: array_index=$array_index"
+
     # Check if index is valid
     if [ "$array_index" -ge 0 ] && [ "$array_index" -lt "${#hot_cmds[@]}" ]; then
         local command="${hot_cmds[$array_index]}"
+
+        # echo "Debug: Executing command: $command"
 
         source "${venv_path}/bin/activate"
 
