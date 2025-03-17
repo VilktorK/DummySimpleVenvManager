@@ -45,6 +45,9 @@ From the main menu, select a venv by its number to access these features:
 - Can be configured to run within the working directory (A choice made when setting the working directory)
 - Saved to `venvhotcmds.cfg`
 
+## Exiting a Venv
+- Type `exit` to leave an active venv and return to the main menu
+
 ## Deleting a Virtual Environment
 
 1. From the main menu, select `0` for Options
