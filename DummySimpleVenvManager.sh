@@ -9,12 +9,14 @@ CONFIG_DIR="$HOME/.config/dummysimplevenvmanager"
 HOTCMDS_FILE="$CONFIG_DIR/venvhotcmds.cfg"
 SETTINGS_FILE="$CONFIG_DIR/settings.cfg"
 CONDA_PATH_FILE="$CONFIG_DIR/condapath.cfg"
-STARTUP_CMDS_FILE="$CONFIG_DIR/global_startup_commands.cfg"
+GLOBAL_STARTUP_CMDS_FILE="$CONFIG_DIR/global_startup_commands.cfg"
+CONTAINER_STARTUP_CMDS_FILE="$CONFIG_DIR/container_startup_commands.cfg"
 
 mkdir -p "$CONFIG_DIR"
 touch "$HOTCMDS_FILE"
 touch "$SETTINGS_FILE"
-touch "$STARTUP_CMDS_FILE"
+touch "$GLOBAL_STARTUP_CMDS_FILE"
+touch "$CONTAINER_STARTUP_CMDS_FILE"
 
 check_conda() {
     if command -v conda >/dev/null 2>&1; then
@@ -130,35 +132,35 @@ get_venv_directory() {
     return 1
 }
 
-# Function to manage startup commands
-manage_startup_commands() {
-    echo -e "\n\033[1;36mManage Venv Startup Commands\033[0m"
-    echo "These commands will run automatically when a venv is activated"
+# Function to manage global startup commands
+manage_global_startup_commands() {
+    echo -e "\n\033[1;36mManage Global Venv Startup Commands\033[0m"
+    echo "These commands will run automatically when any venv is activated"
     echo -e "\033[90m----------------------------------------\033[0m"
 
-    if [ -s "$STARTUP_CMDS_FILE" ]; then
-        echo "Current startup commands:"
+    if [ -s "$GLOBAL_STARTUP_CMDS_FILE" ]; then
+        echo "Current global startup commands:"
         local i=1
         while IFS= read -r cmd; do
             cmd_color_code=$(generate_color_code "$cmd")
             printf "%b%d. %s\033[0m\n" "$cmd_color_code" "$i" "$cmd"
             i=$((i+1))
-        done < "$STARTUP_CMDS_FILE"
+        done < "$GLOBAL_STARTUP_CMDS_FILE"
     else
-        echo "No startup commands configured."
+        echo "No global startup commands configured."
     fi
 
-    echo -e "\n1. Add startup command"
-    echo "2. Remove startup command"
+    echo -e "\n1. Add global startup command"
+    echo "2. Remove global startup command"
     echo "0. Return to options"
 
     read -p "Enter your choice: " cmd_option
     case $cmd_option in
         1)
-            add_startup_command
+            add_global_startup_command
             ;;
         2)
-            remove_startup_command
+            remove_global_startup_command
             ;;
         0)
             return
@@ -169,30 +171,30 @@ manage_startup_commands() {
     esac
 }
 
-add_startup_command() {
-    read -p "Enter the command to run at venv activation: " new_cmd
+add_global_startup_command() {
+    read -p "Enter the command to run at venv activation (for all venvs): " new_cmd
 
     if [ -z "$new_cmd" ]; then
         echo "Operation cancelled."
         return
     fi
 
-    echo "$new_cmd" >> "$STARTUP_CMDS_FILE"
-    echo -e "\033[1;32mStartup command added successfully.\033[0m"
+    echo "$new_cmd" >> "$GLOBAL_STARTUP_CMDS_FILE"
+    echo -e "\033[1;32mGlobal startup command added successfully.\033[0m"
     echo "Press Enter to continue..."
     read
 }
 
-remove_startup_command() {
-    if [ ! -s "$STARTUP_CMDS_FILE" ]; then
-        echo "No startup commands to remove."
+remove_global_startup_command() {
+    if [ ! -s "$GLOBAL_STARTUP_CMDS_FILE" ]; then
+        echo "No global startup commands to remove."
         echo "Press Enter to continue..."
         read
         return
     fi
 
     echo "Select a command to remove:"
-    mapfile -t cmds < "$STARTUP_CMDS_FILE"
+    mapfile -t cmds < "$GLOBAL_STARTUP_CMDS_FILE"
 
     for i in "${!cmds[@]}"; do
         cmd_color_code=$(generate_color_code "${cmds[$i]}")
@@ -208,9 +210,122 @@ remove_startup_command() {
 
     if [[ "$remove_num" =~ ^[0-9]+$ ]] && [ "$remove_num" -ge 1 ] && [ "$remove_num" -le "${#cmds[@]}" ]; then
         temp_file=$(mktemp)
-        sed "$remove_num d" "$STARTUP_CMDS_FILE" > "$temp_file"
-        mv "$temp_file" "$STARTUP_CMDS_FILE"
-        echo -e "\033[1;32mStartup command removed successfully.\033[0m"
+        sed "$remove_num d" "$GLOBAL_STARTUP_CMDS_FILE" > "$temp_file"
+        mv "$temp_file" "$GLOBAL_STARTUP_CMDS_FILE"
+        echo -e "\033[1;32mGlobal startup command removed successfully.\033[0m"
+    else
+        echo "Invalid selection."
+    fi
+
+    echo "Press Enter to continue..."
+    read
+}
+
+# Function to manage container-specific startup commands
+manage_container_startup_commands() {
+    local venv_name="$1"
+
+    echo -e "\n\033[1;36mManage Container-Specific Startup Commands for $venv_name\033[0m"
+    echo "These commands will run automatically when this specific venv is activated"
+    echo -e "\033[90m----------------------------------------\033[0m"
+
+    # Display current container-specific commands
+    local container_cmds=()
+    if [ -s "$CONTAINER_STARTUP_CMDS_FILE" ]; then
+        while IFS=: read -r env cmd || [ -n "$env" ]; do
+            if [ "$env" = "$venv_name" ]; then
+                container_cmds+=("$cmd")
+            fi
+        done < "$CONTAINER_STARTUP_CMDS_FILE"
+    fi
+
+    if [ ${#container_cmds[@]} -gt 0 ]; then
+        echo "Current container-specific startup commands for $venv_name:"
+        for i in "${!container_cmds[@]}"; do
+            cmd_color_code=$(generate_color_code "${container_cmds[$i]}")
+            printf "%b%d. %s\033[0m\n" "$cmd_color_code" "$((i+1))" "${container_cmds[$i]}"
+        done
+    else
+        echo "No container-specific startup commands configured for $venv_name."
+    fi
+
+    echo -e "\n1. Add container-specific startup command"
+    echo "2. Remove container-specific startup command"
+    echo "0. Return to container menu"
+
+    read -p "Enter your choice: " cmd_option
+    case $cmd_option in
+        1)
+            add_container_startup_command "$venv_name"
+            ;;
+        2)
+            remove_container_startup_command "$venv_name"
+            ;;
+        0)
+            return
+            ;;
+        *)
+            echo "Invalid choice"
+            ;;
+    esac
+}
+
+add_container_startup_command() {
+    local venv_name="$1"
+    read -p "Enter the command to run at activation for $venv_name: " new_cmd
+
+    if [ -z "$new_cmd" ]; then
+        echo "Operation cancelled."
+        return
+    fi
+
+    echo "$venv_name:$new_cmd" >> "$CONTAINER_STARTUP_CMDS_FILE"
+    echo -e "\033[1;32mContainer-specific startup command added successfully.\033[0m"
+    echo "Press Enter to continue..."
+    read
+}
+
+remove_container_startup_command() {
+    local venv_name="$1"
+    local container_cmds=()
+    local container_cmd_lines=()
+    local line_num=1
+
+    # Collect commands and their line numbers
+    while IFS=: read -r env cmd || [ -n "$env" ]; do
+        if [ "$env" = "$venv_name" ]; then
+            container_cmds+=("$cmd")
+            container_cmd_lines+=("$line_num")
+        fi
+        line_num=$((line_num+1))
+    done < "$CONTAINER_STARTUP_CMDS_FILE"
+
+    if [ ${#container_cmds[@]} -eq 0 ]; then
+        echo "No container-specific startup commands to remove for $venv_name."
+        echo "Press Enter to continue..."
+        read
+        return
+    fi
+
+    echo "Select a command to remove:"
+    for i in "${!container_cmds[@]}"; do
+        cmd_color_code=$(generate_color_code "${container_cmds[$i]}")
+        printf "%b%d. %s\033[0m\n" "$cmd_color_code" "$((i+1))" "${container_cmds[$i]}"
+    done
+
+    read -p "Enter command number to remove (or press Enter to cancel): " remove_num
+
+    if [ -z "$remove_num" ]; then
+        echo "Operation cancelled."
+        return
+    fi
+
+    if [[ "$remove_num" =~ ^[0-9]+$ ]] && [ "$remove_num" -ge 1 ] && [ "$remove_num" -le "${#container_cmds[@]}" ]; then
+        line_to_remove=${container_cmd_lines[$((remove_num-1))]}
+        temp_file=$(mktemp)
+        sed "${line_to_remove}d" "$CONTAINER_STARTUP_CMDS_FILE" > "$temp_file"
+        mv "$temp_file" "$CONTAINER_STARTUP_CMDS_FILE"
+        echo -e "\033[1;32mContainer-specific startup command removed successfully.\033[0m"
     else
         echo "Invalid selection."
     fi
@@ -234,7 +349,7 @@ display_options_menu() {
     echo "Options:"
     echo "1. Create a new venv"
     echo "2. Delete a venv"
-    echo "3. Manage startup commands"
+    echo "3. Manage global startup commands"
     echo "0. Back to main menu"
 }
 
@@ -261,13 +376,14 @@ display_options_and_commands() {
     echo "Options:"
     echo "1. Enter venv"
     echo "2. Modify venv hot commands"
-    echo "3. Set working directory"
-    echo "4. Show launch script"
+    echo "3. Manage container startup commands"
+    echo "4. Set working directory"
+    echo "5. Show launch script"
     echo "0. Back to main menu"
     echo "------------------------------"
     echo "Hot commands:"
     if [ -f "$HOTCMDS_FILE" ]; then
-        local i=4
+        local i=5
         grep "^$venv_name:" "$HOTCMDS_FILE" | cut -d: -f2- | while read -r cmd; do
             i=$((i+1))
             cmd_color_code=$(generate_color_code "$venv_name:$cmd")
@@ -290,7 +406,7 @@ handle_custom_options() {
             return 2
             ;;
         3)
-            manage_startup_commands
+            manage_global_startup_commands
             return 2
             ;;
         *)
@@ -324,17 +440,20 @@ handle_option() {
             esac
             ;;
         3)
-            set_working_directory "$venv_path"
+            manage_container_startup_commands "$venv_name"
             ;;
         4)
+            set_working_directory "$venv_path"
+            ;;
+        5)
             show_launch_script "$venv_name" "$venv_path"
             ;;
         0)
             return 2
             ;;
         *)
-            if [ "$option" -gt 4 ]; then
-                hot_cmd_num=$((option - 4))
+            if [ "$option" -gt 5 ]; then
+                hot_cmd_num=$((option - 5))
                 execute_hot_command "$venv_name" "$hot_cmd_num" "$venv_path"
             else
                 echo "Invalid choice"
@@ -481,10 +600,21 @@ source "${venv_path}/bin/activate"
 
 EOF
 
-    # Add startup commands if they exist
-    if [ -s "$STARTUP_CMDS_FILE" ]; then
-        echo "# Run configured startup commands" >> "$temp_script"
-        cat "$STARTUP_CMDS_FILE" >> "$temp_script"
+    # Add global startup commands if they exist
+    if [ -s "$GLOBAL_STARTUP_CMDS_FILE" ]; then
+        echo "# Run global startup commands" >> "$temp_script"
+        cat "$GLOBAL_STARTUP_CMDS_FILE" >> "$temp_script"
+        echo "" >> "$temp_script"
+    fi
+
+    # Add container-specific startup commands if they exist
+    if [ -s "$CONTAINER_STARTUP_CMDS_FILE" ]; then
+        echo "# Run container-specific startup commands" >> "$temp_script"
+        while IFS=: read -r env cmd || [ -n "$env" ]; do
+            if [ "$env" = "$venv_name" ]; then
+                echo "$cmd" >> "$temp_script"
+            fi
+        done < "$CONTAINER_STARTUP_CMDS_FILE"
         echo "" >> "$temp_script"
     fi
 
@@ -516,7 +646,7 @@ EOF
     color_code=$(generate_color_code "$venv_name")
     echo -e "${color_code}Activating venv: $venv_name\033[0m"
 
-    if [ -s "$STARTUP_CMDS_FILE" ]; then
+    if [ -s "$GLOBAL_STARTUP_CMDS_FILE" ] || grep -q "^$venv_name:" "$CONTAINER_STARTUP_CMDS_FILE"; then
         echo -e "\033[90mRunning startup commands...\033[0m"
     fi
 
@@ -576,11 +706,20 @@ execute_hot_command() {
     if [ -n "$command" ]; then
         source "${venv_path}/bin/activate"
 
-        # Execute startup commands if they exist
-        if [ -s "$STARTUP_CMDS_FILE" ]; then
+        # Execute global startup commands if they exist
+        if [ -s "$GLOBAL_STARTUP_CMDS_FILE" ]; then
             while IFS= read -r startup_cmd; do
                 eval "$startup_cmd"
-            done < "$STARTUP_CMDS_FILE"
+            done < "$GLOBAL_STARTUP_CMDS_FILE"
+        fi
+
+        # Execute container-specific startup commands if they exist
+        if [ -s "$CONTAINER_STARTUP_CMDS_FILE" ]; then
+            while IFS=: read -r env cmd || [ -n "$env" ]; do
+                if [ "$env" = "$venv_name" ]; then
+                    eval "$cmd"
+                fi
+            done < "$CONTAINER_STARTUP_CMDS_FILE"
         fi
 
         # Set working directory if configured
@@ -646,6 +785,7 @@ delete_venv() {
         echo "1. Delete the virtual environment '$selected_venv'"
         echo "2. Remove the folder '$venv_path'"
         echo "3. Delete all associated hot commands"
+        echo "4. Delete all associated container startup commands"
         read -p "To confirm deletion, Type the name of the venv ($selected_venv): " confirm
 
         if [ "$confirm" = "$selected_venv" ]; then
@@ -673,6 +813,11 @@ delete_venv() {
             local temp_file=$(mktemp)
             grep -v "^$selected_venv:" "$HOTCMDS_FILE" > "$temp_file"
             mv "$temp_file" "$HOTCMDS_FILE"
+
+            # Remove container-specific startup commands
+            temp_file=$(mktemp)
+            grep -v "^$selected_venv:" "$CONTAINER_STARTUP_CMDS_FILE" > "$temp_file"
+            mv "$temp_file" "$CONTAINER_STARTUP_CMDS_FILE"
 
             echo "Virtual environment $selected_venv and its associated files have been deleted."
         else
