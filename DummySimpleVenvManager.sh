@@ -137,6 +137,7 @@ get_venv_directory() {
 
 # Function to manage global startup commands
 manage_global_startup_commands() {
+    clear
     echo -e "\n\033[1;36mManage Global Venv Startup Commands\033[0m"
     echo "These commands will run automatically when any venv is activated"
     echo -e "\033[90m----------------------------------------\033[0m"
@@ -227,6 +228,7 @@ remove_global_startup_command() {
 # Function to manage container-specific startup commands
 manage_container_startup_commands() {
     local venv_name="$1"
+    clear
 
     echo -e "\n\033[1;36mManage Container-Specific Startup Commands for $venv_name\033[0m"
     echo "These commands will run automatically when this specific venv is activated"
@@ -349,6 +351,7 @@ if ! get_venv_directory > /dev/null; then
 fi
 
 display_options_menu() {
+    clear
     echo "Options:"
     echo "1. Create a new venv"
     echo "2. Delete a venv"
@@ -373,6 +376,7 @@ show_venv_info() {
 display_options_and_commands() {
     local venv_name="$1"
     local venv_path="$2"
+    clear
     local color_code=$(generate_color_code "$venv_name")
     echo -e "\n${color_code}Managing venv: $venv_name\033[0m"
     show_venv_info "$venv_path"
@@ -467,6 +471,7 @@ handle_option() {
 }
 
 create_new_venv() {
+    clear
     local venv_dir=$(get_venv_directory)
     if [ $? -ne 0 ]; then
         echo "Error: Could not determine venv directory."
@@ -663,6 +668,7 @@ EOF
 }
 
 set_working_directory() {
+    clear
     local venv_path="$1"
     read -p "Enter the working directory (leave blank to clear): " working_dir
     if [ -n "$working_dir" ]; then
@@ -680,6 +686,7 @@ set_working_directory() {
 }
 
 show_launch_script() {
+    clear
     local venv_name="$1"
     local venv_path="$2"
     local working_dir=""
@@ -700,6 +707,7 @@ show_launch_script() {
 }
 
 remove_hot_command() {
+    clear
     local venv_name="$1"
     local hot_cmds=()
     local hot_cmd_lines=()
@@ -829,6 +837,7 @@ execute_hot_command() {
 }
 
 delete_venv() {
+    clear
     display_items formatted_venvs
     read -p "Enter the number of the venv to delete: " delete_choice
 
@@ -912,6 +921,7 @@ delete_venv() {
 
 # Main Loop
 while true; do
+    clear
     venv_dir=$(get_venv_directory)
     if [ $? -ne 0 ]; then
         echo "Error: Could not determine venv directory."
