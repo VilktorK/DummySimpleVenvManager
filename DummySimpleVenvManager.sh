@@ -583,6 +583,7 @@ display_options_menu() {
     echo "2. Delete a venv"
     echo "3. Manage global startup commands"
     echo "4. Manage sorting preferences"
+    echo "5. Manage color mode"
     echo "0. Back to main menu"
 }
 
@@ -631,6 +632,10 @@ handle_custom_options() {
             ;;
         4)
             manage_sorting_preferences
+            return 2
+            ;;
+        5)
+            manage_color_mode
             return 2
             ;;
         *)
@@ -696,6 +701,9 @@ if ! get_venv_directory > /dev/null; then
         echo "No venv directory set. Exiting..."
         exit 1
     fi
+
+    # Ask for color mode preference during first-time setup
+    prompt_for_color_mode
 fi
 
 # Main Loop

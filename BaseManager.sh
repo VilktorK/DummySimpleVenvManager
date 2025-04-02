@@ -23,11 +23,187 @@ CONTAINER_MENU_ITEMS=6
 # UTILITY FUNCTIONS
 # ==========================================
 
-# Generate random colors for entries
+# Get the current color mode
+get_color_mode() {
+    if [ -f "$SETTINGS_FILE" ]; then
+        color_mode=$(grep "^COLOR_MODE=" "$SETTINGS_FILE" | cut -d= -f2)
+        if [ -z "$color_mode" ]; then
+            echo "dark"  # Default to dark mode
+        else
+            echo "$color_mode"
+        fi
+    else
+        echo "dark"  # Default to dark mode
+    fi
+}
+
+# Set the color mode
+set_color_mode() {
+    local new_mode="$1"
+    local valid_modes=("dark" "light" "monochrome")
+
+    # Validate the mode
+    local valid=0
+    for mode in "${valid_modes[@]}"; do
+        if [ "$new_mode" = "$mode" ]; then
+            valid=1
+            break
+        fi
+    done
+
+    if [ $valid -eq 0 ]; then
+        echo "Invalid color mode: $new_mode"
+        return 1
+    fi
+
+    # Update the settings file
+    if [ -f "$SETTINGS_FILE" ]; then
+        if grep -q "^COLOR_MODE=" "$SETTINGS_FILE"; then
+            # Replace existing setting
+            local temp_file=$(mktemp)
+            sed "s/^COLOR_MODE=.*/COLOR_MODE=$new_mode/" "$SETTINGS_FILE" > "$temp_file"
+            mv "$temp_file" "$SETTINGS_FILE"
+        else
+            # Add new setting
+            echo "COLOR_MODE=$new_mode" >> "$SETTINGS_FILE"
+        fi
+    else
+        # Create new settings file
+        echo "COLOR_MODE=$new_mode" > "$SETTINGS_FILE"
+    fi
+
+    echo "Color mode set to: $new_mode"
+    return 0
+}
+
+# Generate color based on the input string and current color mode
 generate_color_code() {
     local input_string="$1"
+    local color_mode=$(get_color_mode)
+
+    if [ "$color_mode" = "monochrome" ]; then
+        # No color in monochrome mode
+        echo ""
+        return 0
+    fi
+
+    # Use hash to generate a predictable but seemingly random color
     local hash=$(echo "$input_string" | md5sum | cut -c 1-6)
-    local color_code="\033[38;5;$((16 + $(printf "%d" 0x$hash) % 231))m"
+    local hash_dec=$(printf "%d" 0x$hash)
+
+    # Use simpler approach - pick from a set of predefined vivid colors
+    # We'll use 16 base colors that look good in terminals
+    local color_index=$((hash_dec % 16))
+
+    # Define RGB components for our 16 vivid colors
+    local r=0
+    local g=0
+    local b=0
+
+    case $color_index in
+        0)  r=5; g=0; b=0 ;;    # Red
+        1)  r=5; g=2; b=0 ;;    # Orange
+        2)  r=5; g=5; b=0 ;;    # Yellow
+        3)  r=3; g=5; b=0 ;;    # Lime
+        4)  r=0; g=5; b=0 ;;    # Green
+        5)  r=0; g=5; b=2 ;;    # Spring Green
+        6)  r=0; g=5; b=5 ;;    # Cyan
+        7)  r=0; g=2; b=5 ;;    # Light Blue
+        8)  r=0; g=0; b=5 ;;    # Blue
+        9)  r=2; g=0; b=5 ;;    # Purple
+        10) r=5; g=0; b=5 ;;    # Magenta
+        11) r=5; g=0; b=2 ;;    # Pink
+        12) r=4; g=3; b=0 ;;    # Gold
+        13) r=3; g=0; b=3 ;;    # Plum
+        14) r=0; g=3; b=3 ;;    # Teal
+        15) r=3; g=4; b=5 ;;    # Light Steel Blue
+    esac
+
+    # Add slight variation based on another part of the hash
+    local variation=$(($(printf "%d" 0x${hash:3:2}) % 3))
+    local mod_r=$r
+    local mod_g=$g
+    local mod_b=$b
+
+    # Small modifications to create more variety
+    case $variation in
+        1)  # Slightly darker
+            mod_r=$((r > 0 ? r - 1 : 0))
+            mod_g=$((g > 0 ? g - 1 : 0))
+            mod_b=$((b > 0 ? b - 1 : 0))
+            ;;
+        2)  # Slightly different hue
+            local shift=$(($(printf "%d" 0x${hash:5:1}) % 3))
+            if [ $shift -eq 0 ]; then
+                mod_r=$((r > 0 ? r - 1 : 0))
+            elif [ $shift -eq 1 ]; then
+                mod_g=$((g > 0 ? g - 1 : 0))
+            else
+                mod_b=$((b > 0 ? b - 1 : 0))
+            fi
+            ;;
+    esac
+
+    # Now adjust based on color mode
+    if [ "$color_mode" = "dark" ]; then
+        # For dark mode: Ensure brightness is sufficient
+        # Check if all components are below threshold
+        local all_low=1
+        if [ $mod_r -ge 3 ] || [ $mod_g -ge 3 ] || [ $mod_b -ge 3 ]; then
+            all_low=0
+        fi
+
+        # If all components are low, boost the highest one
+        if [ $all_low -eq 1 ]; then
+            if [ $mod_r -ge $mod_g ]; then
+                if [ $mod_r -ge $mod_b ]; then
+                    mod_r=4  # Boost red
+                else
+                    mod_b=4  # Boost blue
+                fi
+            else
+                if [ $mod_g -ge $mod_b ]; then
+                    mod_g=4  # Boost green
+                else
+                    mod_b=4  # Boost blue
+                fi
+            fi
+        fi
+    else
+        # For light mode: Ensure there's enough contrast
+        # Cap maximum brightness
+        if [ $mod_r -gt 3 ]; then mod_r=3; fi
+        if [ $mod_g -gt 3 ]; then mod_g=3; fi
+        if [ $mod_b -gt 3 ]; then mod_b=3; fi
+
+        # Check if all components are above threshold
+        local all_high=1
+        if [ $mod_r -le 1 ] || [ $mod_g -le 1 ] || [ $mod_b -le 1 ]; then
+            all_high=0
+        fi
+
+        # If all components are high, lower the lowest one
+        if [ $all_high -eq 1 ]; then
+            if [ $mod_r -le $mod_g ]; then
+                if [ $mod_r -le $mod_b ]; then
+                    mod_r=0  # Lower red
+                else
+                    mod_b=0  # Lower blue
+                fi
+            else
+                if [ $mod_g -le $mod_b ]; then
+                    mod_g=0  # Lower green
+                else
+                    mod_b=0  # Lower blue
+                fi
+            fi
+        fi
+    fi
+
+    # Calculate the color code
+    local color_num=$((16 + 36*mod_r + 6*mod_g + mod_b))
+
+    local color_code="\033[38;5;${color_num}m"
     echo "$color_code"
 }
 
