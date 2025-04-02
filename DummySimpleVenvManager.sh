@@ -11,15 +11,242 @@ SETTINGS_FILE="$CONFIG_DIR/settings.cfg"
 CONDA_PATH_FILE="$CONFIG_DIR/condapath.cfg"
 GLOBAL_STARTUP_CMDS_FILE="$CONFIG_DIR/global_startup_commands.cfg"
 CONTAINER_STARTUP_CMDS_FILE="$CONFIG_DIR/container_startup_commands.cfg"
+LAST_ACCESS_FILE="$CONFIG_DIR/last_access.cfg"
+CREATION_TIME_FILE="$CONFIG_DIR/creation_time.cfg"
 
 mkdir -p "$CONFIG_DIR"
 touch "$HOTCMDS_FILE"
 touch "$SETTINGS_FILE"
 touch "$GLOBAL_STARTUP_CMDS_FILE"
 touch "$CONTAINER_STARTUP_CMDS_FILE"
+touch "$LAST_ACCESS_FILE"
+touch "$CREATION_TIME_FILE"
 
 # Amount of entries in the container's menu
 CONTAINER_MENU_ITEMS=6
+
+# Function to get the current sort method
+get_sort_method() {
+    if [ -f "$SETTINGS_FILE" ]; then
+        sort_method=$(grep "^SORT_METHOD=" "$SETTINGS_FILE" | cut -d= -f2)
+        if [ -z "$sort_method" ]; then
+            echo "alphabetical"  # Default to alphabetical sorting
+        else
+            echo "$sort_method"
+        fi
+    else
+        echo "alphabetical"  # Default to alphabetical sorting
+    fi
+}
+
+# Function to set the sort method
+set_sort_method() {
+    local new_method="$1"
+    local valid_methods=("alphabetical" "creation_time" "last_used")
+
+    # Validate the method
+    local valid=0
+    for method in "${valid_methods[@]}"; do
+        if [ "$new_method" = "$method" ]; then
+            valid=1
+            break
+        fi
+    done
+
+    if [ $valid -eq 0 ]; then
+        echo "Invalid sort method: $new_method"
+        return 1
+    fi
+
+    # Update the settings file
+    if [ -f "$SETTINGS_FILE" ]; then
+        if grep -q "^SORT_METHOD=" "$SETTINGS_FILE"; then
+            # Replace existing setting
+            local temp_file=$(mktemp)
+            sed "s/^SORT_METHOD=.*/SORT_METHOD=$new_method/" "$SETTINGS_FILE" > "$temp_file"
+            mv "$temp_file" "$SETTINGS_FILE"
+        else
+            # Add new setting
+            echo "SORT_METHOD=$new_method" >> "$SETTINGS_FILE"
+        fi
+    else
+        # Create new settings file
+        echo "SORT_METHOD=$new_method" > "$SETTINGS_FILE"
+    fi
+
+    echo "Sort method set to: $new_method"
+    return 0
+}
+
+# Function to update the last access time for a venv
+update_last_access() {
+    local venv_name="$1"
+    local current_timestamp=$(date +%s)
+
+    # Only update if the venv doesn't exist in the file or if it's been more than 1 minute
+    if [ -f "$LAST_ACCESS_FILE" ]; then
+        local last_timestamp=$(grep "^$venv_name:" "$LAST_ACCESS_FILE" | cut -d: -f2)
+        if [ -z "$last_timestamp" ] || [ $((current_timestamp - last_timestamp)) -gt 60 ]; then
+            if grep -q "^$venv_name:" "$LAST_ACCESS_FILE"; then
+                # Replace existing entry
+                local temp_file=$(mktemp)
+                sed "s/^$venv_name:.*/$venv_name:$current_timestamp/" "$LAST_ACCESS_FILE" > "$temp_file"
+                mv "$temp_file" "$LAST_ACCESS_FILE"
+            else
+                # Add new entry
+                echo "$venv_name:$current_timestamp" >> "$LAST_ACCESS_FILE"
+            fi
+        fi
+    else
+        # Create new file
+        echo "$venv_name:$current_timestamp" > "$LAST_ACCESS_FILE"
+    fi
+}
+
+# Function to get the last access time for a venv
+get_last_access() {
+    local venv_name="$1"
+
+    if [ -f "$LAST_ACCESS_FILE" ]; then
+        local timestamp=$(grep "^$venv_name:" "$LAST_ACCESS_FILE" | cut -d: -f2)
+        if [ -z "$timestamp" ]; then
+            echo "0"  # Default to 0 if not found
+        else
+            echo "$timestamp"
+        fi
+    else
+        echo "0"  # Default to 0 if file doesn't exist
+    fi
+}
+
+# Function to set the creation time for a venv
+set_creation_time() {
+    local venv_name="$1"
+    local timestamp=$(date +%s)
+
+    if [ -f "$CREATION_TIME_FILE" ]; then
+        if grep -q "^$venv_name:" "$CREATION_TIME_FILE"; then
+            # Replace existing entry
+            local temp_file=$(mktemp)
+            sed "s/^$venv_name:.*/$venv_name:$timestamp/" "$CREATION_TIME_FILE" > "$temp_file"
+            mv "$temp_file" "$CREATION_TIME_FILE"
+        else
+            # Add new entry
+            echo "$venv_name:$timestamp" >> "$CREATION_TIME_FILE"
+        fi
+    else
+        # Create new file
+        echo "$venv_name:$timestamp" > "$CREATION_TIME_FILE"
+    fi
+}
+
+# Function to get the creation time for a venv
+get_creation_time() {
+    local venv_name="$1"
+
+    if [ -f "$CREATION_TIME_FILE" ]; then
+        local timestamp=$(grep "^$venv_name:" "$CREATION_TIME_FILE" | cut -d: -f2)
+        if [ -z "$timestamp" ]; then
+            # Fallback to directory creation time
+            local venv_dir=$(get_venv_directory)
+            if [ $? -eq 0 ] && [ -d "$venv_dir/$venv_name" ]; then
+                echo $(stat -c %Y "$venv_dir/$venv_name")
+            else
+                echo "0"  # Default to 0 if directory not found
+            fi
+        else
+            echo "$timestamp"
+        fi
+    else
+        # Fallback to directory creation time
+        local venv_dir=$(get_venv_directory)
+        if [ $? -eq 0 ] && [ -d "$venv_dir/$venv_name" ]; then
+            echo $(stat -c %Y "$venv_dir/$venv_name")
+        else
+            echo "0"  # Default to 0 if directory not found
+        fi
+    fi
+}
+
+# Function to sort venvs by creation time
+sort_venvs_by_creation_time() {
+    local -n venvs_ref="$1"
+    local venv_times=()
+
+    # Collect venvs and their creation times
+    for venv in "${venvs_ref[@]}"; do
+        venv_times+=("$venv:$(get_creation_time "$venv")")
+    done
+
+    # Sort by creation time (newest first)
+    IFS=$'\n' venv_times=($(sort -t: -k2 -nr <<<"${venv_times[*]}"))
+
+    # Extract the sorted venvs
+    venvs_ref=()
+    for venv_time in "${venv_times[@]}"; do
+        venvs_ref+=("${venv_time%%:*}")
+    done
+}
+
+# Function to sort venvs by last access time
+sort_venvs_by_last_access() {
+    local -n venvs_ref="$1"
+    local venv_times=()
+
+    # Collect venvs and their last access times
+    for venv in "${venvs_ref[@]}"; do
+        venv_times+=("$venv:$(get_last_access "$venv")")
+    done
+
+    # Sort by last access time (most recent first)
+    IFS=$'\n' venv_times=($(sort -t: -k2 -nr <<<"${venv_times[*]}"))
+
+    # Extract the sorted venvs
+    venvs_ref=()
+    for venv_time in "${venv_times[@]}"; do
+        venvs_ref+=("${venv_time%%:*}")
+    done
+}
+
+# Function to manage sorting preferences
+manage_sorting_preferences() {
+    clear
+    echo -e "\n\033[1;36mManage Sorting Preferences\033[0m"
+    echo -e "\033[90m----------------------------------------\033[0m"
+
+    local current_method=$(get_sort_method)
+
+    echo "Current sorting method: $current_method"
+    echo ""
+    echo "Available sorting methods:"
+    echo "1. Alphabetical"
+    echo "2. Most recently created"
+    echo "3. Most recently used"
+    echo "0. Return to options"
+
+    read -p "Enter your choice: " sort_choice
+
+    case $sort_choice in
+        1)
+            set_sort_method "alphabetical"
+            ;;
+        2)
+            set_sort_method "creation_time"
+            ;;
+        3)
+            set_sort_method "last_used"
+            ;;
+        0)
+            return
+            ;;
+        *)
+            echo "Invalid choice"
+            ;;
+    esac
+
+    echo "Press Enter to continue..."
+    read
+}
 
 check_conda() {
     if command -v conda >/dev/null 2>&1; then
@@ -356,6 +583,7 @@ display_options_menu() {
     echo "1. Create a new venv"
     echo "2. Delete a venv"
     echo "3. Manage global startup commands"
+    echo "4. Manage sorting preferences"
     echo "0. Back to main menu"
 }
 
@@ -416,6 +644,10 @@ handle_custom_options() {
             manage_global_startup_commands
             return 2
             ;;
+        4)
+            manage_sorting_preferences
+            return 2
+            ;;
         *)
             echo "Invalid choice"
             return 0
@@ -460,7 +692,7 @@ handle_option() {
             ;;
         *)
             if [ "$option" -gt 5 ]; then
-            execute_hot_command "$venv_name" "$option" "$venv_path"
+                execute_hot_command "$venv_name" "$option" "$venv_path"
             else
                 echo "Invalid choice"
                 echo "Press Enter to continue..."
@@ -581,6 +813,9 @@ create_new_venv() {
         esac
     done
 
+    # Record creation time
+    set_creation_time "$venv_name"
+
     echo -e "\n\033[1;32mNew venv created successfully: $venv_name\033[0m"
     echo "Initializing venv..."
 
@@ -595,6 +830,9 @@ create_new_venv() {
 enter_venv() {
     local venv_name="$1"
     local venv_path="$2"
+
+    # Update last access time
+    update_last_access "$venv_name"
 
     # Create a temporary activation script with startup commands
     local temp_script=$(mktemp)
@@ -769,30 +1007,23 @@ execute_hot_command() {
     local command_num="$2"
     local venv_path="$3"
 
-    # echo "Debug: venv_name=$venv_name, command_num=$command_num, CONTAINER_MENU_ITEMS=$CONTAINER_MENU_ITEMS"
+    # Update last access time
+    update_last_access "$venv_name"
 
     # Get all hot commands for this venv
     local hot_cmds=()
     while IFS= read -r line; do
         if [[ "$line" == "$venv_name:"* ]]; then
             hot_cmds+=("${line#*:}")
-
-            # echo "Debug: Added hot command: ${line#*:}"
         fi
     done < "$HOTCMDS_FILE"
-
-    # echo "Debug: Total hot commands found: ${#hot_cmds[@]}"
 
     # Convert the menu number to array index using the global CONTAINER_MENU_ITEMS
     local array_index=$((command_num - $CONTAINER_MENU_ITEMS))
 
-    # echo "Debug: array_index=$array_index"
-
     # Check if index is valid
     if [ "$array_index" -ge 0 ] && [ "$array_index" -lt "${#hot_cmds[@]}" ]; then
         local command="${hot_cmds[$array_index]}"
-
-        # echo "Debug: Executing command: $command"
 
         source "${venv_path}/bin/activate"
 
@@ -910,6 +1141,15 @@ delete_venv() {
             grep -v "^$selected_venv:" "$CONTAINER_STARTUP_CMDS_FILE" > "$temp_file"
             mv "$temp_file" "$CONTAINER_STARTUP_CMDS_FILE"
 
+            # Remove entries from tracking files
+            temp_file=$(mktemp)
+            grep -v "^$selected_venv:" "$CREATION_TIME_FILE" > "$temp_file" 2>/dev/null
+            mv "$temp_file" "$CREATION_TIME_FILE"
+
+            temp_file=$(mktemp)
+            grep -v "^$selected_venv:" "$LAST_ACCESS_FILE" > "$temp_file" 2>/dev/null
+            mv "$temp_file" "$LAST_ACCESS_FILE"
+
             echo "Virtual environment $selected_venv and its associated files have been deleted."
         else
             echo "Deletion aborted: name did not match."
@@ -928,10 +1168,30 @@ while true; do
         exit 1
     fi
 
-    venvs=($(find "$venv_dir" -maxdepth 1 -type d -printf "%f\n" | sort))
+    # Get raw venv list
+    venvs=($(find "$venv_dir" -maxdepth 1 -type d -printf "%f\n"))
     venvs=(${venvs[@]/"$(basename "$venv_dir")"/})
     venvs=(${venvs[@]/*.conda/})
 
+    # Sort the venv list based on the sorting method
+    sort_method=$(get_sort_method)
+
+    case $sort_method in
+        alphabetical)
+            # Sort alphabetically
+            IFS=$'\n' venvs=($(sort <<<"${venvs[*]}"))
+            ;;
+        creation_time)
+            # Sort by creation time (newest first)
+            sort_venvs_by_creation_time venvs
+            ;;
+        last_used)
+            # Sort by last access time (most recent first)
+            sort_venvs_by_last_access venvs
+            ;;
+    esac
+
+    # Format the venv list for display
     formatted_venvs=()
     for venv in "${venvs[@]}"; do
         version=$(get_venv_python_version "$venv_dir/$venv")
