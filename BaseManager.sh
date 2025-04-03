@@ -693,8 +693,111 @@ add_hot_command() {
         echo "Hot command add canceled."
         return
     fi
-    echo "$item_name:$new_command" >> "$HOTCMDS_FILE"
+
+    read -p "Enter a name for this command (optional, press Enter to skip): " command_name
+    if [ -z "$command_name" ]; then
+        # Use default name (the command itself)
+        echo "$item_name:$new_command" >> "$HOTCMDS_FILE"
+    else
+        # Include custom name
+        echo "$item_name:$command_name:$new_command" >> "$HOTCMDS_FILE"
+    fi
+
     echo "Hot command added successfully."
+    echo "Press Enter to continue..."
+    read
+}
+
+rename_hot_command() {
+    local item_name="$1"
+    clear
+    local hot_cmds=()
+    local hot_cmd_names=()
+    local hot_cmd_lines=()
+    local line_num=1
+
+    # Collect commands, their names, and line numbers
+    while IFS=: read -r name cmd_name cmd || [ -n "$name" ]; do
+        if [ "$name" = "$item_name" ]; then
+            if [ -z "$cmd" ]; then
+                # Old format: name:command
+                hot_cmds+=("$cmd_name")
+                hot_cmd_names+=("$cmd_name")  # Default name is the command itself
+            else
+                # New format: name:command_name:command
+                hot_cmds+=("$cmd")
+                hot_cmd_names+=("$cmd_name")
+            fi
+            hot_cmd_lines+=("$line_num")
+        fi
+        line_num=$((line_num+1))
+    done < "$HOTCMDS_FILE"
+
+    if [ ${#hot_cmds[@]} -eq 0 ]; then
+        echo "No hot commands to rename for $item_name."
+        echo "Press Enter to continue..."
+        read
+        return
+    fi
+
+    echo "Select a hot command to rename:"
+
+    # Display commands with their menu numbers and current names
+    local menu_number=$CONTAINER_MENU_ITEMS
+    for i in "${!hot_cmds[@]}"; do
+        if [ "${hot_cmds[$i]}" = "${hot_cmd_names[$i]}" ]; then
+            # Command has no custom name yet
+            cmd_color_code=$(generate_color_code "$item_name:${hot_cmds[$i]}")
+            printf "%b%d. %s\033[0m\n" "$cmd_color_code" "$menu_number" "${hot_cmds[$i]}"
+        else
+            # Command has a custom name
+            cmd_color_code=$(generate_color_code "$item_name:${hot_cmd_names[$i]}")
+            printf "%b%d. \"%s\" (%s)\033[0m\n" "$cmd_color_code" "$menu_number" "${hot_cmd_names[$i]}" "${hot_cmds[$i]}"
+        fi
+        menu_number=$((menu_number+1))
+    done
+
+    read -p "Enter command number to rename (or press Enter to cancel): " rename_num
+
+    if [ -z "$rename_num" ]; then
+        echo "Operation cancelled."
+        return
+    fi
+
+    # Convert menu number to array index
+    if [[ "$rename_num" =~ ^[0-9]+$ ]] && [ "$rename_num" -ge $CONTAINER_MENU_ITEMS ] && [ "$rename_num" -le $(($CONTAINER_MENU_ITEMS - 1 + ${#hot_cmds[@]})) ]; then
+        local array_index=$((rename_num - $CONTAINER_MENU_ITEMS))
+        local line_to_modify=${hot_cmd_lines[$array_index]}
+        local current_command="${hot_cmds[$array_index]}"
+        local current_name="${hot_cmd_names[$array_index]}"
+
+        echo "Current command: $current_command"
+        if [ "$current_command" != "$current_name" ]; then
+            echo "Current name: $current_name"
+        fi
+
+        read -p "Enter new name for this command (or press Enter to reset to default): " new_name
+
+        # Create a temp file and modify the line
+        temp_file=$(mktemp)
+        if [ -z "$new_name" ]; then
+            # Reset to default (no custom name)
+            sed "${line_to_modify}d" "$HOTCMDS_FILE" > "$temp_file"
+            echo "$item_name:$current_command" >> "$temp_file"
+            echo -e "\033[1;32mHot command name reset to default.\033[0m"
+        else
+            # Set custom name
+            sed "${line_to_modify}d" "$HOTCMDS_FILE" > "$temp_file"
+            echo "$item_name:$new_name:$current_command" >> "$temp_file"
+            echo -e "\033[1;32mHot command renamed successfully to \"$new_name\".\033[0m"
+        fi
+
+        sort "$temp_file" > "$HOTCMDS_FILE"
+        rm "$temp_file"
+    else
+        echo "Invalid selection."
+    fi
+
     echo "Press Enter to continue..."
     read
 }
@@ -705,13 +808,22 @@ remove_hot_command() {
     local item_name="$1"
     clear
     local hot_cmds=()
+    local hot_cmd_names=()
     local hot_cmd_lines=()
     local line_num=1
 
-    # Collect commands and their line numbers
-    while IFS=: read -r name cmd || [ -n "$name" ]; do
+    # Collect commands, names, and their line numbers
+    while IFS=: read -r name cmd_name cmd || [ -n "$name" ]; do
         if [ "$name" = "$item_name" ]; then
-            hot_cmds+=("$cmd")
+            if [ -z "$cmd" ]; then
+                # Old format: name:command
+                hot_cmds+=("$cmd_name")
+                hot_cmd_names+=("$cmd_name")  # Default name is the command itself
+            else
+                # New format: name:command_name:command
+                hot_cmds+=("$cmd")
+                hot_cmd_names+=("$cmd_name")
+            fi
             hot_cmd_lines+=("$line_num")
         fi
         line_num=$((line_num+1))
@@ -726,11 +838,18 @@ remove_hot_command() {
 
     echo "Select a hot command to remove:"
 
-    # Display commands with their menu numbers
+    # Display commands with their menu numbers and names
     local menu_number=$CONTAINER_MENU_ITEMS
     for i in "${!hot_cmds[@]}"; do
-        cmd_color_code=$(generate_color_code "$item_name:${hot_cmds[$i]}")
-        printf "%b%d. %s\033[0m\n" "$cmd_color_code" "$menu_number" "${hot_cmds[$i]}"
+        if [ "${hot_cmds[$i]}" = "${hot_cmd_names[$i]}" ]; then
+            # Command has no custom name
+            cmd_color_code=$(generate_color_code "$item_name:${hot_cmds[$i]}")
+            printf "%b%d. %s\033[0m\n" "$cmd_color_code" "$menu_number" "${hot_cmds[$i]}"
+        else
+            # Command has a custom name
+            cmd_color_code=$(generate_color_code "$item_name:${hot_cmd_names[$i]}")
+            printf "%b%d. \"%s\" (%s)\033[0m\n" "$cmd_color_code" "$menu_number" "${hot_cmd_names[$i]}" "${hot_cmds[$i]}"
+        fi
         menu_number=$((menu_number+1))
     done
 

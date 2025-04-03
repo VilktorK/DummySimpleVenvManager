@@ -605,11 +605,26 @@ display_options_and_commands() {
     echo "Hot commands:"
     if [ -f "$HOTCMDS_FILE" ]; then
         local i=5
-        grep "^$venv_name:" "$HOTCMDS_FILE" | cut -d: -f2- | while read -r cmd; do
-            i=$((i+1))
-            cmd_color_code=$(generate_color_code "$venv_name:$cmd")
-            printf "%b%d. %s\033[0m\n" "$cmd_color_code" "$i" "$cmd"
-        done
+        # Updated to handle the new format with optional names
+        while IFS=: read -r env cmd_name cmd || [ -n "$env" ]; do
+            if [ "$env" = "$venv_name" ]; then
+                i=$((i+1))
+                if [ -z "$cmd" ]; then
+                    # Old format: env:command
+                    cmd_color_code=$(generate_color_code "$venv_name:$cmd_name")
+                    printf "%b%d. %s\033[0m\n" "$cmd_color_code" "$i" "$cmd_name"
+                else
+                    # New format: env:command_name:command
+                    cmd_color_code=$(generate_color_code "$venv_name:$cmd_name")
+                    # If command_name is different from command, show it as a named command
+                    if [ "$cmd_name" != "$cmd" ]; then
+                        printf "%b%d. \"%s\" (%s)\033[0m\n" "$cmd_color_code" "$i" "$cmd_name" "$cmd"
+                    else
+                        printf "%b%d. %s\033[0m\n" "$cmd_color_code" "$i" "$cmd"
+                    fi
+                fi
+            fi
+        done < "$HOTCMDS_FILE"
     else
         echo "No hot commands found."
     fi
@@ -658,6 +673,7 @@ handle_option() {
         2)
             echo "1. Add hot command"
             echo "2. Remove hot command"
+            echo "3. Rename hot command"  # Added option for renaming
             read -p "Enter your choice: " modify_option
             if [ -z "$modify_option" ]; then
                 return 0
@@ -665,6 +681,7 @@ handle_option() {
             case $modify_option in
                 1) add_hot_command "$venv_name" ;;
                 2) remove_hot_command "$venv_name" ;;
+                3) rename_hot_command "$venv_name" ;;  # New function call
                 *) echo "Invalid choice" ;;
             esac
             ;;
