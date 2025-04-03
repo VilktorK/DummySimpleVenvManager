@@ -207,6 +207,82 @@ generate_color_code() {
     echo "$color_code"
 }
 
+# Manage color mode preferences
+manage_color_mode() {
+    clear
+    echo -e "\n\033[1;36mManage Color Mode\033[0m"
+    echo -e "\033[90m----------------------------------------\033[0m"
+
+    local current_mode=$(get_color_mode)
+
+    echo "Current color mode: $current_mode"
+    echo ""
+    echo "Available color modes:"
+    echo "1. Dark mode (light colored text for dark terminals)"
+    echo "2. Light mode (dark colored text for light terminals)"
+    echo "3. Monochrome (no colors)"
+    echo "0. Return to options"
+
+    read -p "Enter your choice: " color_choice
+
+    case $color_choice in
+        1)
+            set_color_mode "dark"
+            ;;
+        2)
+            set_color_mode "light"
+            ;;
+        3)
+            set_color_mode "monochrome"
+            ;;
+        0)
+            return
+            ;;
+        *)
+            echo "Invalid choice"
+            ;;
+    esac
+
+    echo "Press Enter to continue..."
+    read
+}
+
+# Ask for color mode preference during first-time setup
+prompt_for_color_mode() {
+    echo -e "\n\033[1;36mColor Mode Selection\033[0m"
+    echo -e "\033[90m----------------------------------------\033[0m"
+    echo "Please select your preferred color mode:"
+    echo "1. Dark mode (light colored text for dark terminals)"
+    echo "2. Light mode (dark colored text for light terminals)"
+    echo "3. Monochrome (no colors)"
+
+    local valid_selection=0
+    while [ $valid_selection -eq 0 ]; do
+        read -p "Enter your choice (1-3): " color_choice
+
+        case $color_choice in
+            1)
+                set_color_mode "dark"
+                valid_selection=1
+                ;;
+            2)
+                set_color_mode "light"
+                valid_selection=1
+                ;;
+            3)
+                set_color_mode "monochrome"
+                valid_selection=1
+                ;;
+            *)
+                echo "Invalid choice. Please enter 1, 2, or 3."
+                ;;
+        esac
+    done
+
+    echo -e "\033[1;32mColor mode set successfully!\033[0m"
+}
+
+
 # Ensure necessary directories and files exist
 ensure_config_files() {
     mkdir -p "$CONFIG_DIR"
