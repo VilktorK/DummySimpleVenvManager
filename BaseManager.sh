@@ -15,6 +15,7 @@ GLOBAL_STARTUP_CMDS_FILE="" # Should be set by inheriting script
 CONTAINER_STARTUP_CMDS_FILE="" # Should be set by inheriting script
 LAST_ACCESS_FILE="" # Should be set by inheriting script
 CREATION_TIME_FILE="" # Should be set by inheriting script
+FAVORITES_FILE="" # Should be set by inheriting script
 
 # Default number of entries in the container's menu (can be overridden)
 CONTAINER_MENU_ITEMS=6
@@ -310,6 +311,10 @@ ensure_config_files() {
     if [ -n "$CREATION_TIME_FILE" ]; then
         touch "$CREATION_TIME_FILE"
     fi
+
+    if [ -n "$FAVORITES_FILE" ]; then
+        touch "$FAVORITES_FILE"
+    fi
 }
 
 # ==========================================
@@ -331,6 +336,225 @@ display_items() {
         printf "%d. %b%s\033[0m\n" "$((i+1))" "$color_code" "$item_name"
     done
     echo -e "\n0. Options"
+}
+
+# ==========================================
+# FAVORITES SYSTEM FUNCTIONS
+# ==========================================
+
+# Check if an item is marked as a favorite
+is_favorite() {
+    local item_name="$1"
+
+    # Check if favorites file exists
+    if [ ! -f "$FAVORITES_FILE" ]; then
+        return 1
+    fi
+
+    # Check if item is in favorites
+    if grep -q "^$item_name$" "$FAVORITES_FILE"; then
+        return 0
+    else
+        return 1
+    fi
+}
+
+# Toggle an item's favorite status
+toggle_favorite() {
+    local item_name="$1"
+
+    if is_favorite "$item_name"; then
+        # Remove from favorites
+        local temp_file=$(mktemp)
+        grep -v "^$item_name$" "$FAVORITES_FILE" > "$temp_file"
+        mv "$temp_file" "$FAVORITES_FILE"
+        echo "Removed '$item_name' from favorites."
+    else
+        # Add to favorites
+        echo "$item_name" >> "$FAVORITES_FILE"
+        echo "Added '$item_name' to favorites."
+    fi
+}
+
+# Get the list of favorites from all available items
+get_favorites() {
+    local -n all_items_ref="$1"
+    local -n favorites_ref="$2"
+
+    favorites_ref=()
+
+    # Check if favorites file exists
+    if [ ! -f "$FAVORITES_FILE" ] || [ ! -s "$FAVORITES_FILE" ]; then
+        return 0
+    fi
+
+    # Get all favorites that exist in all_items
+    while IFS= read -r favorite; do
+        for item in "${all_items_ref[@]}"; do
+            if [ "$item" = "$favorite" ]; then
+                favorites_ref+=("$item")
+                break
+            fi
+        done
+    done < "$FAVORITES_FILE"
+
+    # Sort favorites based on current sort method
+    if [ ${#favorites_ref[@]} -gt 0 ]; then
+        sort_method=$(get_sort_method)
+        case $sort_method in
+            alphabetical)
+                # Sort alphabetically
+                IFS=$'\n' favorites_ref=($(sort <<<"${favorites_ref[*]}"))
+                ;;
+            creation_time)
+                # Sort by creation time
+                sort_items_by_creation_time favorites_ref
+                ;;
+            last_used)
+                # Sort by last access time
+                sort_items_by_last_access favorites_ref
+                ;;
+        esac
+    fi
+
+    return 0
+}
+
+# Display items with favorites section at the top
+display_items_with_favorites() {
+    if [ -z "$1" ]; then
+        echo "No items array provided"
+        return 1
+    fi
+    local -n items_ref=$1
+    local -a favorites=()
+    local -a non_favorites=()
+
+    # Get favorites
+    get_favorites items_ref favorites
+
+    # Get non-favorites
+    for item in "${items_ref[@]}"; do
+        local is_fav=0
+        for fav in "${favorites[@]}"; do
+            if [ "$item" = "$fav" ]; then
+                is_fav=1
+                break
+            fi
+        done
+        if [ $is_fav -eq 0 ]; then
+            non_favorites+=("$item")
+        fi
+    done
+
+    # Display favorites if there are any
+    if [ ${#favorites[@]} -gt 0 ]; then
+        echo "Favorites:"
+        for i in "${!favorites[@]}"; do
+            item_name="${favorites[i]}"
+            color_code=$(generate_color_code "$item_name")
+            printf "%d. %b%s\033[0m\n" "$((i+1))" "$color_code" "$item_name"
+        done
+        echo ""
+    fi
+
+    echo "Available ${MANAGER_NAME}s:"
+    # Start numbering after favorites
+    local start_num=$((${#favorites[@]} + 1))
+    for i in "${!non_favorites[@]}"; do
+        item_name="${non_favorites[i]}"
+        color_code=$(generate_color_code "$item_name")
+        printf "%d. %b%s\033[0m\n" "$((start_num + i))" "$color_code" "$item_name"
+    done
+    echo -e "\n0. Options"
+}
+
+# Get the actual item from a selection number
+get_item_from_selection() {
+    local selection="$1"
+    local -n all_items_ref="$2"
+    local -n result_ref="$3"
+
+    # Get favorites
+    local -a favorites=()
+    get_favorites all_items_ref favorites
+
+    # Check if selection is in favorites range
+    if [ "$selection" -ge 1 ] && [ "$selection" -le "${#favorites[@]}" ]; then
+        result_ref="${favorites[$((selection-1))]}"
+        return 0
+    fi
+
+    # Get non-favorites
+    local -a non_favorites=()
+    for item in "${all_items_ref[@]}"; do
+        local is_fav=0
+        for fav in "${favorites[@]}"; do
+            if [ "$item" = "$fav" ]; then
+                is_fav=1
+                break
+            fi
+        done
+        if [ $is_fav -eq 0 ]; then
+            non_favorites+=("$item")
+        fi
+    done
+
+    # Check if selection is in non-favorites range
+    local non_fav_index=$((selection - ${#favorites[@]} - 1))
+    if [ "$non_fav_index" -ge 0 ] && [ "$non_fav_index" -lt "${#non_favorites[@]}" ]; then
+        result_ref="${non_favorites[$non_fav_index]}"
+        return 0
+    fi
+
+    # Invalid selection
+    return 1
+}
+
+# Function to manage favorites
+manage_favorites_menu() {
+    local -n items_ref="$1"
+
+    while true; do
+        clear
+        echo -e "\n\033[1;36mManage Favorites\033[0m"
+        echo -e "\033[90m----------------------------------------\033[0m"
+
+        # Display all items with favorite status
+        echo "Current items (★ = favorite):"
+        for i in "${!items_ref[@]}"; do
+            item="${items_ref[i]}"
+            color_code=$(generate_color_code "$item")
+            star="  "
+            if is_favorite "$item"; then
+                star="★ "
+            fi
+            printf "%d. %s%b%s\033[0m\n" "$((i+1))" "$star" "$color_code" "$item"
+        done
+
+        echo -e "\nEnter the number of an item to toggle its favorite status"
+        echo "0. Return to options"
+
+        read -p "Enter your choice: " fav_choice
+
+        if [ "$fav_choice" = "0" ]; then
+            break
+        fi
+
+        # Check if selection is valid
+        if [ "$fav_choice" -ge 1 ] && [ "$fav_choice" -le "${#items_ref[@]}" ]; then
+            local selected_item="${items_ref[$((fav_choice-1))]}"
+            toggle_favorite "$selected_item"
+            echo "Press Enter to continue..."
+            read
+        else
+            echo "Invalid choice"
+            echo "Press Enter to continue..."
+            read
+        fi
+    done
+
+    return 0
 }
 
 # ==========================================
