@@ -32,7 +32,7 @@ get_creation_time() {
             if [ $? -eq 0 ] && [ -d "$venv_dir/$venv_name" ]; then
                 echo $(stat -c %Y "$venv_dir/$venv_name")
             else
-                echo "0"  # Default to 0 if directory not found
+                echo "0"
             fi
         else
             echo "$timestamp"
@@ -43,7 +43,7 @@ get_creation_time() {
         if [ $? -eq 0 ] && [ -d "$venv_dir/$venv_name" ]; then
             echo $(stat -c %Y "$venv_dir/$venv_name")
         else
-            echo "0"  # Default to 0 if directory not found
+            echo "0"
         fi
     fi
 }
@@ -314,7 +314,6 @@ enter_venv() {
     # Write the basic activation
     cat > "$temp_script" << EOF
 #!/bin/bash
-# Auto-generated venv activation script
 source "${venv_path}/bin/activate"
 
 EOF
@@ -426,11 +425,29 @@ execute_hot_command() {
     # Update last access time
     update_last_access "$venv_name"
 
-    # Get all hot commands for this venv
+    # Get all hot commands for this venv (handle both formats)
     local hot_cmds=()
-    while IFS= read -r line; do
-        if [[ "$line" == "$venv_name:"* ]]; then
-            hot_cmds+=("${line#*:}")
+    while IFS= read -r line || [ -n "$line" ]; do
+        # Skip empty lines
+        [ -z "$line" ] && continue
+        
+        # Extract the venv name (everything before first colon)
+        local env="${line%%:*}"
+        if [ "$env" = "$venv_name" ]; then
+            # Count colons to determine format
+            local colon_count=$(echo "$line" | tr -cd ':' | wc -c)
+            
+            if [ "$colon_count" -eq 1 ]; then
+                # Old format: env:command
+                local after_first_colon="${line#*:}"
+                hot_cmds+=("$after_first_colon")
+            else
+                # New format: env:name:command
+                local temp="${line#*:}"        # Remove first part (env:)
+                local name="${temp%%:*}"       # Get the name part (up to first colon)
+                local command="${temp#"$name":}"  # Remove name and its colon, leaving just command
+                hot_cmds+=("$command")
+            fi
         fi
     done < "$HOTCMDS_FILE"
 
@@ -446,7 +463,15 @@ execute_hot_command() {
         # Execute global startup commands if they exist
         if [ -s "$GLOBAL_STARTUP_CMDS_FILE" ]; then
             while IFS= read -r startup_cmd; do
-                eval "$startup_cmd"
+                local startup_temp_script=$(mktemp)
+                cat > "$startup_temp_script" << 'EOF'
+#!/bin/bash
+set -e
+EOF
+                echo "$startup_cmd" >> "$startup_temp_script"
+                chmod +x "$startup_temp_script"
+                bash "$startup_temp_script"
+                rm "$startup_temp_script"
             done < "$GLOBAL_STARTUP_CMDS_FILE"
         fi
 
@@ -454,7 +479,15 @@ execute_hot_command() {
         if [ -s "$CONTAINER_STARTUP_CMDS_FILE" ]; then
             while IFS=: read -r env cmd || [ -n "$env" ]; do
                 if [ "$env" = "$venv_name" ]; then
-                    eval "$cmd"
+                    local container_temp_script=$(mktemp)
+                    cat > "$container_temp_script" << 'EOF'
+#!/bin/bash
+set -e
+EOF
+                    echo "$cmd" >> "$container_temp_script"
+                    chmod +x "$container_temp_script"
+                    bash "$container_temp_script"
+                    rm "$container_temp_script"
                 fi
             done < "$CONTAINER_STARTUP_CMDS_FILE"
         fi
@@ -465,13 +498,40 @@ execute_hot_command() {
             use_working_dir=$(cat "${venv_path}/use_working_dir_for_hot_commands.cfg" 2>/dev/null || echo "no")
             if [ -n "$working_dir" ] && [ -d "$working_dir" ] && [ "$use_working_dir" = "yes" ]; then
                 pushd "$working_dir" > /dev/null
-                eval "$command"
+                # Create a temporary script file to handle complex commands with quotes
+                local temp_script=$(mktemp)
+                cat > "$temp_script" << 'EOF'
+#!/bin/bash
+set -e
+EOF
+                echo "$command" >> "$temp_script"
+                chmod +x "$temp_script"
+                bash "$temp_script"
+                rm "$temp_script"
                 popd > /dev/null
             else
-                eval "$command"
+                # Create a temporary script file to handle complex commands with quotes
+                local temp_script=$(mktemp)
+                cat > "$temp_script" << 'EOF'
+#!/bin/bash
+set -e
+EOF
+                echo "$command" >> "$temp_script"
+                chmod +x "$temp_script"
+                bash "$temp_script"
+                rm "$temp_script"
             fi
         else
-            eval "$command"
+            # Create a temporary script file to handle complex commands with quotes
+            local temp_script=$(mktemp)
+            cat > "$temp_script" << 'EOF'
+#!/bin/bash
+set -e
+EOF
+            echo "$command" >> "$temp_script"
+            chmod +x "$temp_script"
+            bash "$temp_script"
+            rm "$temp_script"
         fi
         deactivate
         echo "Hot command executed. Press Enter to continue..."
@@ -592,7 +652,7 @@ display_options_menu() {
     echo "3. Manage global startup commands"
     echo "4. Manage sorting preferences"
     echo "5. Manage color mode"
-    echo "6. Manage favorites"  # New option
+    echo "6. Manage favorites"
     echo "0. Back to main menu"
 }
 
@@ -614,23 +674,28 @@ display_options_and_commands() {
     echo "Hot commands:"
     if [ -f "$HOTCMDS_FILE" ]; then
         local i=5
-        # Updated to handle the new format with optional names
-        while IFS=: read -r env cmd_name cmd || [ -n "$env" ]; do
+        while IFS= read -r line || [ -n "$line" ]; do
+            # Skip empty lines
+            [ -z "$line" ] && continue
+            
+            # Extract the venv name (everything before first colon)
+            local env="${line%%:*}"
             if [ "$env" = "$venv_name" ]; then
-                i=$((i+1))
-                if [ -z "$cmd" ]; then
-                    # Old format: env:command
+                # Get everything after the first colon
+                local after_first_colon="${line#*:}"
+                
+                # Check if there's another colon (indicating new format with custom name)
+                if [[ "$after_first_colon" == *:* ]]; then
+                    # New format: env:name:command (has custom name)
+                    local cmd_name="${after_first_colon%%:*}"
+                    i=$((i+1))
                     cmd_color_code=$(generate_color_code "$venv_name:$cmd_name")
                     printf "%b%d. %s\033[0m\n" "$cmd_color_code" "$i" "$cmd_name"
                 else
-                    # New format: env:command_name:command
-                    cmd_color_code=$(generate_color_code "$venv_name:$cmd_name")
-                    # If command_name is different from command, show it as a named command
-                    if [ "$cmd_name" != "$cmd" ]; then
-                        printf "%b%d. \"%s\" (%s)\033[0m\n" "$cmd_color_code" "$i" "$cmd_name" "$cmd"
-                    else
-                        printf "%b%d. %s\033[0m\n" "$cmd_color_code" "$i" "$cmd"
-                    fi
+                    # Old format: env:command (no custom name)
+                    i=$((i+1))
+                    cmd_color_code=$(generate_color_code "$venv_name:$after_first_colon")
+                    printf "%b%d. %s\033[0m\n" "$cmd_color_code" "$i" "$after_first_colon"
                 fi
             fi
         done < "$HOTCMDS_FILE"
@@ -725,7 +790,8 @@ handle_option() {
         2)
             echo "1. Add hot command"
             echo "2. Remove hot command"
-            echo "3. Rename hot command"  # Added option for renaming
+            echo "3. Rename hot command"
+            echo "4. Edit hot command"
             read -p "Enter your choice: " modify_option
             if [ -z "$modify_option" ]; then
                 return 0
@@ -733,7 +799,8 @@ handle_option() {
             case $modify_option in
                 1) add_hot_command "$venv_name" ;;
                 2) remove_hot_command "$venv_name" ;;
-                3) rename_hot_command "$venv_name" ;;  # New function call
+                3) rename_hot_command "$venv_name" ;;
+                4) edit_hot_command "$venv_name" ;;
                 *) echo "Invalid choice" ;;
             esac
             ;;
@@ -830,7 +897,7 @@ while true; do
         echo "Favorites:"
         for i in "${!formatted_favorites[@]}"; do
             item_name="${formatted_favorites[i]}"
-            venv_name="${favorites[i]}"  # Keep track of the actual venv name
+            venv_name="${favorites[i]}"
             color_code=$(generate_color_code "$venv_name")
             printf "%d. %b%s\033[0m\n" "$((i+1))" "$color_code" "$item_name"
         done
@@ -863,7 +930,7 @@ while true; do
     # Display non-favorites
     for i in "${!formatted_non_favorites[@]}"; do
         item_name="${formatted_non_favorites[i]}"
-        venv_name="${non_favorites[i]}"  # Keep track of the actual venv name
+        venv_name="${non_favorites[i]}"
         color_code=$(generate_color_code "$venv_name")
         printf "%d. %b%s\033[0m\n" "$((start_num + i))" "$color_code" "$item_name"
     done
