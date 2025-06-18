@@ -1026,8 +1026,8 @@ rename_hot_command() {
                 # Get everything after the first colon
                 local after_first_colon="${line#*:}"
                 
-                # Check if there's another colon (indicating new format with custom name)
-                if [[ "$after_first_colon" == *:* ]]; then
+                # Check if there's another colon AND it's not part of a URL (indicating new format with custom name)
+                if [[ "$after_first_colon" == *:* ]] && [[ "$after_first_colon" != *"://"* ]] && [[ "${after_first_colon#*:}" != *"://"* ]]; then
                     # New format: box:name:command
                     local cmd_name="${after_first_colon%%:*}"
                     local cmd="${after_first_colon#*:}"
@@ -1132,8 +1132,8 @@ edit_hot_command() {
                 # Get everything after the first colon
                 local after_first_colon="${line#*:}"
                 
-                # Check if there's another colon (indicating new format with custom name)
-                if [[ "$after_first_colon" == *:* ]]; then
+                # Check if there's another colon AND it's not part of a URL (indicating new format with custom name)
+                if [[ "$after_first_colon" == *:* ]] && [[ "$after_first_colon" != *"://"* ]] && [[ "${after_first_colon#*:}" != *"://"* ]]; then
                     # New format: box:name:command
                     local cmd_name="${after_first_colon%%:*}"
                     local cmd="${after_first_colon#*:}"
@@ -1312,8 +1312,8 @@ remove_hot_command() {
                 # Get everything after the first colon
                 local after_first_colon="${line#*:}"
                 
-                # Check if there's another colon (indicating new format with custom name)
-                if [[ "$after_first_colon" == *:* ]]; then
+                # Check if there's another colon AND it's not part of a URL (indicating new format with custom name)
+                if [[ "$after_first_colon" == *:* ]] && [[ "$after_first_colon" != *"://"* ]] && [[ "${after_first_colon#*:}" != *"://"* ]]; then
                     # New format: box:name:command
                     local cmd_name="${after_first_colon%%:*}"
                     local cmd="${after_first_colon#*:}"
