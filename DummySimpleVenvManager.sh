@@ -434,19 +434,31 @@ execute_hot_command() {
         # Extract the venv name (everything before first colon)
         local env="${line%%:*}"
         if [ "$env" = "$venv_name" ]; then
-            # Get everything after the first colon
-            local after_first_colon="${line#*:}"
-            
-            # Check if there's another colon AND it's not part of a URL (indicating new format with custom name)
-            if [[ "$after_first_colon" == *:* ]] && [[ "$after_first_colon" != *"://"* ]] && [[ "${after_first_colon#*:}" != *"://"* ]]; then
-                # New format: env:name:command
-                local temp="${line#*:}"        # Remove first part (env:)
-                local name="${temp%%:*}"       # Get the name part (up to first colon)
-                local command="${temp#"$name":}"  # Remove name and its colon, leaving just command
-                hot_cmds+=("$command")
+            # Check for new exotic delimiter format first
+            if [[ "$line" == *":-:+:"* ]]; then
+                # New format with exotic delimiter
+                local after_delimiter="${line#*:-:+:}"
+                if [[ "$after_delimiter" == *":-:+:"* ]]; then
+                    # Format: env:-:+:name:-:+:command
+                    local command="${after_delimiter#*:-:+:}"
+                    hot_cmds+=("$command")
+                else
+                    # Format: env:-:+:command
+                    hot_cmds+=("$after_delimiter")
+                fi
             else
-                # Old format: env:command
-                hot_cmds+=("$after_first_colon")
+                # Legacy single-colon format
+                local after_first_colon="${line#*:}"
+                if [[ "$after_first_colon" == *:* ]] && [[ "$after_first_colon" != *"://"* ]] && [[ "${after_first_colon#*:}" != *"://"* ]]; then
+                    # Old format: env:name:command
+                    local temp="${line#*:}"
+                    local name="${temp%%:*}"
+                    local command="${temp#"$name":}"
+                    hot_cmds+=("$command")
+                else
+                    # Old format: env:command
+                    hot_cmds+=("$after_first_colon")
+                fi
             fi
         fi
     done < "$HOTCMDS_FILE"
@@ -678,25 +690,44 @@ display_options_and_commands() {
             # Skip empty lines
             [ -z "$line" ] && continue
             
-            # Extract the venv name (everything before first colon)
-            local env="${line%%:*}"
+            # Extract the venv name (everything before first delimiter)
+            local env
+            if [[ "$line" == *":-:+:"* ]]; then
+                env="${line%%:-:+:*}"
+            else
+                env="${line%%:*}"
+            fi
+            
             if [ "$env" = "$venv_name" ]; then
-                # Get everything after the first colon
-                local after_first_colon="${line#*:}"
+                i=$((i+1))
                 
-                # Check if there's another colon AND it's not part of a URL (indicating new format with custom name)
-                # URLs contain colons (like https:// or http://) so we need to be more specific
-                if [[ "$after_first_colon" == *:* ]] && [[ "$after_first_colon" != *"://"* ]] && [[ "${after_first_colon#*:}" != *"://"* ]]; then
-                    # New format: env:name:command (has custom name)
-                    local cmd_name="${after_first_colon%%:*}"
-                    i=$((i+1))
-                    cmd_color_code=$(generate_color_code "$venv_name:$cmd_name")
-                    printf "%b%d. %s\033[0m\n" "$cmd_color_code" "$i" "$cmd_name"
+                # Check for new exotic delimiter format first
+                if [[ "$line" == *":-:+:"* ]]; then
+                    # New format with exotic delimiter
+                    local after_delimiter="${line#*:-:+:}"
+                    if [[ "$after_delimiter" == *":-:+:"* ]]; then
+                        # Format: env:-:+:name:-:+:command
+                        local cmd_name="${after_delimiter%%:-:+:*}"
+                        cmd_color_code=$(generate_color_code "$venv_name:$cmd_name")
+                        printf "%b%d. %s\033[0m\n" "$cmd_color_code" "$i" "$cmd_name"
+                    else
+                        # Format: env:-:+:command
+                        cmd_color_code=$(generate_color_code "$venv_name:$after_delimiter")
+                        printf "%b%d. %s\033[0m\n" "$cmd_color_code" "$i" "$after_delimiter"
+                    fi
                 else
-                    # Old format: env:command (no custom name)
-                    i=$((i+1))
-                    cmd_color_code=$(generate_color_code "$venv_name:$after_first_colon")
-                    printf "%b%d. %s\033[0m\n" "$cmd_color_code" "$i" "$after_first_colon"
+                    # Legacy single-colon format
+                    local after_first_colon="${line#*:}"
+                    if [[ "$after_first_colon" == *:* ]] && [[ "$after_first_colon" != *"://"* ]] && [[ "${after_first_colon#*:}" != *"://"* ]]; then
+                        # Old format: env:name:command (has custom name)
+                        local cmd_name="${after_first_colon%%:*}"
+                        cmd_color_code=$(generate_color_code "$venv_name:$cmd_name")
+                        printf "%b%d. %s\033[0m\n" "$cmd_color_code" "$i" "$cmd_name"
+                    else
+                        # Old format: env:command (no custom name)
+                        cmd_color_code=$(generate_color_code "$venv_name:$after_first_colon")
+                        printf "%b%d. %s\033[0m\n" "$cmd_color_code" "$i" "$after_first_colon"
+                    fi
                 fi
             fi
         done < "$HOTCMDS_FILE"

@@ -985,6 +985,73 @@ remove_container_startup_command() {
 # HOT COMMANDS MANAGEMENT
 # ==========================================
 
+# Helper function to parse hot command lines with backward compatibility
+parse_hot_command_line() {
+    local line="$1"
+    local item_name="$2"
+    
+    # Extract the box name (everything before first delimiter)
+    local box
+    if [[ "$line" == *":-:+:"* ]]; then
+        box="${line%%:-:+:*}"
+    else
+        box="${line%%:*}"
+    fi
+    
+    # Only process if this line is for our item
+    if [ "$box" != "$item_name" ]; then
+        return 1  # Not our item
+    fi
+    
+    # Check for new exotic delimiter format first
+    if [[ "$line" == *":-:+:"* ]]; then
+        # New format with exotic delimiter
+        local after_delimiter="${line#*:-:+:}"
+        if [[ "$after_delimiter" == *":-:+:"* ]]; then
+            # Format: box:-:+:name:-:+:command
+            echo "NEW_NAMED"
+            echo "${after_delimiter%%:-:+:*}"  # name
+            echo "${after_delimiter#*:-:+:}"   # command
+        else
+            # Format: box:-:+:command
+            echo "NEW_SIMPLE"
+            echo "$after_delimiter"  # command (name = command)
+            echo "$after_delimiter"  # command
+        fi
+    else
+        # Legacy single-colon format
+        local after_first_colon="${line#*:}"
+        if [[ "$after_first_colon" == *:* ]] && [[ "$after_first_colon" != *"://"* ]] && [[ "${after_first_colon#*:}" != *"://"* ]]; then
+            # Old format: box:name:command
+            echo "OLD_NAMED"
+            echo "${after_first_colon%%:*}"  # name
+            echo "${after_first_colon#*:}"   # command
+        else
+            # Old format: box:command
+            echo "OLD_SIMPLE"
+            echo "$after_first_colon"  # command (name = command)
+            echo "$after_first_colon"  # command
+        fi
+    fi
+    
+    return 0
+}
+
+# Helper function to format hot command lines in new format
+format_hot_command_line() {
+    local item_name="$1"
+    local command="$2"
+    local name="$3"  # Optional custom name
+    
+    if [ -n "$name" ] && [ "$name" != "$command" ]; then
+        # Use custom name format
+        echo "$item_name:-:+:$name:-:+:$command"
+    else
+        # Use simple format
+        echo "$item_name:-:+:$command"
+    fi
+}
+
 # Add a hot command to an item
 add_hot_command() {
     local item_name="$1"
@@ -995,13 +1062,10 @@ add_hot_command() {
     fi
 
     read -p "Enter a name for this command (optional, press Enter to skip): " command_name
-    if [ -z "$command_name" ]; then
-        # Use default name (the command itself)
-        echo "$item_name:$new_command" >> "$HOTCMDS_FILE"
-    else
-        # Include custom name
-        echo "$item_name:$command_name:$new_command" >> "$HOTCMDS_FILE"
-    fi
+    
+    # Use new format helper function
+    local formatted_line=$(format_hot_command_line "$item_name" "$new_command" "$command_name")
+    echo "$formatted_line" >> "$HOTCMDS_FILE"
 
     echo "Hot command added successfully."
     echo "Press Enter to continue..."
@@ -1020,23 +1084,44 @@ rename_hot_command() {
     while IFS= read -r line || [ -n "$line" ]; do
         # Skip empty lines
         if [ -n "$line" ]; then
-            # Extract the box name (everything before first colon)
-            local box="${line%%:*}"
+            # Extract the box name (everything before first delimiter)
+            local box
+            if [[ "$line" == *":::"* ]]; then
+                box="${line%%:::*}"
+            else
+                box="${line%%:*}"
+            fi
+            
             if [ "$box" = "$item_name" ]; then
-                # Get everything after the first colon
-                local after_first_colon="${line#*:}"
-                
-                # Check if there's another colon AND it's not part of a URL (indicating new format with custom name)
-                if [[ "$after_first_colon" == *:* ]] && [[ "$after_first_colon" != *"://"* ]] && [[ "${after_first_colon#*:}" != *"://"* ]]; then
-                    # New format: box:name:command
-                    local cmd_name="${after_first_colon%%:*}"
-                    local cmd="${after_first_colon#*:}"
-                    hot_cmds+=("$cmd")
-                    hot_cmd_names+=("$cmd_name")
+                # Check for new triple-colon format first
+                if [[ "$line" == *":::"* ]]; then
+                    # New format with triple-colon delimiter
+                    local after_triple="${line#*:::}"
+                    if [[ "$after_triple" == *":::"* ]]; then
+                        # Format: box:::name:::command
+                        local cmd_name="${after_triple%%:::*}"
+                        local cmd="${after_triple#*:::}"
+                        hot_cmds+=("$cmd")
+                        hot_cmd_names+=("$cmd_name")
+                    else
+                        # Format: box:::command
+                        hot_cmds+=("$after_triple")
+                        hot_cmd_names+=("$after_triple")
+                    fi
                 else
-                    # Old format: box:command
-                    hot_cmds+=("$after_first_colon")
-                    hot_cmd_names+=("$after_first_colon")  # Default name is the command itself
+                    # Legacy single-colon format
+                    local after_first_colon="${line#*:}"
+                    if [[ "$after_first_colon" == *:* ]] && [[ "$after_first_colon" != *"://"* ]] && [[ "${after_first_colon#*:}" != *"://"* ]]; then
+                        # Old format: box:name:command
+                        local cmd_name="${after_first_colon%%:*}"
+                        local cmd="${after_first_colon#*:}"
+                        hot_cmds+=("$cmd")
+                        hot_cmd_names+=("$cmd_name")
+                    else
+                        # Old format: box:command
+                        hot_cmds+=("$after_first_colon")
+                        hot_cmd_names+=("$after_first_colon")
+                    fi
                 fi
                 hot_cmd_lines+=("$line_num")
             fi
