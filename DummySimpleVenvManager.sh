@@ -434,19 +434,19 @@ execute_hot_command() {
         # Extract the venv name (everything before first colon)
         local env="${line%%:*}"
         if [ "$env" = "$venv_name" ]; then
-            # Count colons to determine format
-            local colon_count=$(echo "$line" | tr -cd ':' | wc -c)
+            # Get everything after the first colon
+            local after_first_colon="${line#*:}"
             
-            if [ "$colon_count" -eq 1 ]; then
-                # Old format: env:command
-                local after_first_colon="${line#*:}"
-                hot_cmds+=("$after_first_colon")
-            else
+            # Check if there's another colon AND it's not part of a URL (indicating new format with custom name)
+            if [[ "$after_first_colon" == *:* ]] && [[ "$after_first_colon" != *"://"* ]] && [[ "${after_first_colon#*:}" != *"://"* ]]; then
                 # New format: env:name:command
                 local temp="${line#*:}"        # Remove first part (env:)
                 local name="${temp%%:*}"       # Get the name part (up to first colon)
                 local command="${temp#"$name":}"  # Remove name and its colon, leaving just command
                 hot_cmds+=("$command")
+            else
+                # Old format: env:command
+                hot_cmds+=("$after_first_colon")
             fi
         fi
     done < "$HOTCMDS_FILE"
@@ -684,8 +684,9 @@ display_options_and_commands() {
                 # Get everything after the first colon
                 local after_first_colon="${line#*:}"
                 
-                # Check if there's another colon (indicating new format with custom name)
-                if [[ "$after_first_colon" == *:* ]]; then
+                # Check if there's another colon AND it's not part of a URL (indicating new format with custom name)
+                # URLs contain colons (like https:// or http://) so we need to be more specific
+                if [[ "$after_first_colon" == *:* ]] && [[ "$after_first_colon" != *"://"* ]] && [[ "${after_first_colon#*:}" != *"://"* ]]; then
                     # New format: env:name:command (has custom name)
                     local cmd_name="${after_first_colon%%:*}"
                     i=$((i+1))
