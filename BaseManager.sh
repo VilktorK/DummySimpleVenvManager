@@ -1063,9 +1063,16 @@ add_hot_command() {
 
     read -p "Enter a name for this command (optional, press Enter to skip): " command_name
     
-    # Use new format helper function
-    local formatted_line=$(format_hot_command_line "$item_name" "$new_command" "$command_name")
-    echo "$formatted_line" >> "$HOTCMDS_FILE"
+    # Get per-container hot commands file
+    local container_hotcmds_file=$(get_container_hotcmds_file "$item_name")
+    mkdir -p "$(dirname "$container_hotcmds_file")"
+    
+    # Use simplified per-container format: name:-:+:command
+    if [ -n "$command_name" ]; then
+        echo "$command_name:-:+:$new_command" >> "$container_hotcmds_file"
+    else
+        echo "$new_command:-:+:$new_command" >> "$container_hotcmds_file"
+    fi
 
     echo "Hot command added successfully."
     echo "Press Enter to continue..."

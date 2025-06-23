@@ -7,7 +7,8 @@ source "$SCRIPT_DIR/BaseManager.sh"
 # Set manager-specific variables
 MANAGER_NAME="Venv"
 CONFIG_DIR="$HOME/.config/dummysimplevenvmanager"
-HOTCMDS_FILE="$CONFIG_DIR/venvhotcmds.cfg"
+HOTCMDS_DIR="$CONFIG_DIR/hotcommands"
+HOTCMDS_FILE="$CONFIG_DIR/venvhotcmds.cfg"  # Legacy file for migration
 SETTINGS_FILE="$CONFIG_DIR/settings.cfg"
 CONDA_PATH_FILE="$CONFIG_DIR/condapath.cfg"
 GLOBAL_STARTUP_CMDS_FILE="$CONFIG_DIR/global_startup_commands.cfg"
@@ -19,6 +20,58 @@ FAVORITES_FILE="$CONFIG_DIR/favorites.cfg"
 # Initialize files
 ensure_config_files
 touch "$CONDA_PATH_FILE"
+
+# Hot command management functions
+get_container_hotcmds_file() {
+    local container_name="$1"
+    echo "$HOTCMDS_DIR/${container_name}.cfg"
+}
+
+migrate_hotcommands_to_per_container() {
+    # Only migrate if old file exists and new directory doesn't
+    if [ -f "$HOTCMDS_FILE" ] && [ ! -d "$HOTCMDS_DIR" ]; then
+        echo "Migrating hot commands to per-container files..."
+        mkdir -p "$HOTCMDS_DIR"
+        
+        while IFS= read -r line || [ -n "$line" ]; do
+            [ -z "$line" ] && continue
+            
+            local container_name
+            if [[ "$line" == *":-:+:"* ]]; then
+                container_name="${line%%:-:+:*}"
+                local rest="${line#*:-:+:}"
+                if [[ "$rest" == *":-:+:"* ]]; then
+                    # Format: container:-:+:name:-:+:command
+                    local name="${rest%%:-:+:*}"
+                    local command="${rest#*:-:+:}"
+                    echo "$name:-:+:$command" >> "$HOTCMDS_DIR/${container_name}.cfg"
+                else
+                    # Format: container:-:+:command
+                    echo "$rest:-:+:$rest" >> "$HOTCMDS_DIR/${container_name}.cfg"
+                fi
+            else
+                container_name="${line%%:*}"
+                local rest="${line#*:}"
+                if [[ "$rest" == *:* ]] && [[ "$rest" != *"://"* ]]; then
+                    # Format: container:name:command
+                    local name="${rest%%:*}"
+                    local command="${rest#*:}"
+                    echo "$name:-:+:$command" >> "$HOTCMDS_DIR/${container_name}.cfg"
+                else
+                    # Format: container:command
+                    echo "$rest:-:+:$rest" >> "$HOTCMDS_DIR/${container_name}.cfg"
+                fi
+            fi
+        done < "$HOTCMDS_FILE"
+        
+        # Backup old file
+        mv "$HOTCMDS_FILE" "${HOTCMDS_FILE}.backup"
+        echo "Migration complete. Old file backed up to ${HOTCMDS_FILE}.backup"
+    fi
+}
+
+# Migrate hot commands on startup
+migrate_hotcommands_to_per_container
 
 # Override get_creation_time for venv-specific behavior
 get_creation_time() {
@@ -425,43 +478,25 @@ execute_hot_command() {
     # Update last access time
     update_last_access "$venv_name"
 
-    # Get all hot commands for this venv (handle both formats)
+    # Get all hot commands for this venv from per-container file
+    local container_hotcmds_file=$(get_container_hotcmds_file "$venv_name")
     local hot_cmds=()
-    while IFS= read -r line || [ -n "$line" ]; do
-        # Skip empty lines
-        [ -z "$line" ] && continue
-        
-        # Extract the venv name (everything before first colon)
-        local env="${line%%:*}"
-        if [ "$env" = "$venv_name" ]; then
-            # Check for new exotic delimiter format first
+    
+    if [ -f "$container_hotcmds_file" ]; then
+        while IFS= read -r line || [ -n "$line" ]; do
+            # Skip empty lines
+            [ -z "$line" ] && continue
+            
+            # Parse per-container format: name:-:+:command
             if [[ "$line" == *":-:+:"* ]]; then
-                # New format with exotic delimiter
-                local after_delimiter="${line#*:-:+:}"
-                if [[ "$after_delimiter" == *":-:+:"* ]]; then
-                    # Format: env:-:+:name:-:+:command
-                    local command="${after_delimiter#*:-:+:}"
-                    hot_cmds+=("$command")
-                else
-                    # Format: env:-:+:command
-                    hot_cmds+=("$after_delimiter")
-                fi
+                local command="${line#*:-:+:}"
+                hot_cmds+=("$command")
             else
-                # Legacy single-colon format
-                local after_first_colon="${line#*:}"
-                if [[ "$after_first_colon" == *:* ]] && [[ "$after_first_colon" != *"://"* ]] && [[ "${after_first_colon#*:}" != *"://"* ]]; then
-                    # Old format: env:name:command
-                    local temp="${line#*:}"
-                    local name="${temp%%:*}"
-                    local command="${temp#"$name":}"
-                    hot_cmds+=("$command")
-                else
-                    # Old format: env:command
-                    hot_cmds+=("$after_first_colon")
-                fi
+                # Fallback for malformed lines
+                hot_cmds+=("$line")
             fi
-        fi
-    done < "$HOTCMDS_FILE"
+        done < "$container_hotcmds_file"
+    fi
 
     # Convert the menu number to array index using the global CONTAINER_MENU_ITEMS
     local array_index=$((command_num - $CONTAINER_MENU_ITEMS))
@@ -693,53 +728,26 @@ display_options_and_commands() {
     echo "0. Back to main menu"
     echo "------------------------------"
     echo "Hot commands:"
-    if [ -f "$HOTCMDS_FILE" ]; then
+    local container_hotcmds_file=$(get_container_hotcmds_file "$venv_name")
+    if [ -f "$container_hotcmds_file" ]; then
         local i=5
         while IFS= read -r line || [ -n "$line" ]; do
             # Skip empty lines
             [ -z "$line" ] && continue
             
-            # Extract the venv name (everything before first delimiter)
-            local env
-            if [[ "$line" == *":-:+:"* ]]; then
-                env="${line%%:-:+:*}"
-            else
-                env="${line%%:*}"
-            fi
+            i=$((i+1))
             
-            if [ "$env" = "$venv_name" ]; then
-                i=$((i+1))
-                
-                # Check for new exotic delimiter format first
-                if [[ "$line" == *":-:+:"* ]]; then
-                    # New format with exotic delimiter
-                    local after_delimiter="${line#*:-:+:}"
-                    if [[ "$after_delimiter" == *":-:+:"* ]]; then
-                        # Format: env:-:+:name:-:+:command
-                        local cmd_name="${after_delimiter%%:-:+:*}"
-                        cmd_color_code=$(generate_color_code "$venv_name:$cmd_name")
-                        printf "%b%d. %s\033[0m\n" "$cmd_color_code" "$i" "$cmd_name"
-                    else
-                        # Format: env:-:+:command
-                        cmd_color_code=$(generate_color_code "$venv_name:$after_delimiter")
-                        printf "%b%d. %s\033[0m\n" "$cmd_color_code" "$i" "$after_delimiter"
-                    fi
-                else
-                    # Legacy single-colon format
-                    local after_first_colon="${line#*:}"
-                    if [[ "$after_first_colon" == *:* ]] && [[ "$after_first_colon" != *"://"* ]] && [[ "${after_first_colon#*:}" != *"://"* ]]; then
-                        # Old format: env:name:command (has custom name)
-                        local cmd_name="${after_first_colon%%:*}"
-                        cmd_color_code=$(generate_color_code "$venv_name:$cmd_name")
-                        printf "%b%d. %s\033[0m\n" "$cmd_color_code" "$i" "$cmd_name"
-                    else
-                        # Old format: env:command (no custom name)
-                        cmd_color_code=$(generate_color_code "$venv_name:$after_first_colon")
-                        printf "%b%d. %s\033[0m\n" "$cmd_color_code" "$i" "$after_first_colon"
-                    fi
-                fi
+            # Parse per-container format: name:-:+:command
+            if [[ "$line" == *":-:+:"* ]]; then
+                local cmd_name="${line%%:-:+:*}"
+                cmd_color_code=$(generate_color_code "$venv_name:$cmd_name")
+                printf "%b%d. %s\033[0m\n" "$cmd_color_code" "$i" "$cmd_name"
+            else
+                # Fallback for malformed lines
+                cmd_color_code=$(generate_color_code "$venv_name:$line")
+                printf "%b%d. %s\033[0m\n" "$cmd_color_code" "$i" "$line"
             fi
-        done < "$HOTCMDS_FILE"
+        done < "$container_hotcmds_file"
     else
         echo "No hot commands found."
     fi
@@ -844,8 +852,10 @@ handle_option() {
                 3) rename_hot_command "$venv_name" ;;
                 4) edit_hot_command "$venv_name" ;;
                 5) 
-                    echo -e "\nHot commands configuration file path:"
-                    echo "$HOTCMDS_FILE"
+                    echo -e "\nHot commands configuration directory:"
+                    echo "$HOTCMDS_DIR"
+                    echo -e "\nThis venv's hot commands file:"
+                    echo "$(get_container_hotcmds_file "$venv_name")"
                     echo -e "\nPress Enter to continue..."
                     read
                     ;;
