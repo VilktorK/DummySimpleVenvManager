@@ -1086,27 +1086,27 @@ rename_hot_command() {
         if [ -n "$line" ]; then
             # Extract the box name (everything before first delimiter)
             local box
-            if [[ "$line" == *":::"* ]]; then
-                box="${line%%:::*}"
+            if [[ "$line" == *":-:+:"* ]]; then
+                box="${line%%:-:+:*}"
             else
                 box="${line%%:*}"
             fi
             
             if [ "$box" = "$item_name" ]; then
-                # Check for new triple-colon format first
-                if [[ "$line" == *":::"* ]]; then
-                    # New format with triple-colon delimiter
-                    local after_triple="${line#*:::}"
-                    if [[ "$after_triple" == *":::"* ]]; then
-                        # Format: box:::name:::command
-                        local cmd_name="${after_triple%%:::*}"
-                        local cmd="${after_triple#*:::}"
+                # Check for new exotic delimiter format first
+                if [[ "$line" == *":-:+:"* ]]; then
+                    # New format with exotic delimiter
+                    local after_delimiter="${line#*:-:+:}"
+                    if [[ "$after_delimiter" == *":-:+:"* ]]; then
+                        # Format: box:-:+:name:-:+:command
+                        local cmd_name="${after_delimiter%%:-:+:*}"
+                        local cmd="${after_delimiter#*:-:+:}"
                         hot_cmds+=("$cmd")
                         hot_cmd_names+=("$cmd_name")
                     else
-                        # Format: box:::command
-                        hot_cmds+=("$after_triple")
-                        hot_cmd_names+=("$after_triple")
+                        # Format: box:-:+:command
+                        hot_cmds+=("$after_delimiter")
+                        hot_cmd_names+=("$after_delimiter")
                     fi
                 else
                     # Legacy single-colon format
@@ -1179,12 +1179,12 @@ rename_hot_command() {
         if [ -z "$new_name" ]; then
             # Reset to default (no custom name)
             sed "${line_to_modify}d" "$HOTCMDS_FILE" > "$temp_file"
-            echo "$item_name:$current_command" >> "$temp_file"
+            format_hot_command_line "$item_name" "$current_command" "" >> "$temp_file"
             echo -e "\033[1;32mHot command name reset to default.\033[0m"
         else
             # Set custom name
             sed "${line_to_modify}d" "$HOTCMDS_FILE" > "$temp_file"
-            echo "$item_name:$new_name:$current_command" >> "$temp_file"
+            format_hot_command_line "$item_name" "$current_command" "$new_name" >> "$temp_file"
             echo -e "\033[1;32mHot command renamed successfully to \"$new_name\".\033[0m"
         fi
 

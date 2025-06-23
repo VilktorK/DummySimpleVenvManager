@@ -515,6 +515,9 @@ EOF
                 cat > "$temp_script" << 'EOF'
 #!/bin/bash
 set -e
+# Source interactive shell configurations to have access to aliases and PATH
+[ -f ~/.bashrc ] && source ~/.bashrc
+[ -f ~/.bash_profile ] && source ~/.bash_profile
 EOF
                 echo "$command" >> "$temp_script"
                 chmod +x "$temp_script"
@@ -527,6 +530,9 @@ EOF
                 cat > "$temp_script" << 'EOF'
 #!/bin/bash
 set -e
+# Source interactive shell configurations to have access to aliases and PATH
+[ -f ~/.bashrc ] && source ~/.bashrc
+[ -f ~/.bash_profile ] && source ~/.bash_profile
 EOF
                 echo "$command" >> "$temp_script"
                 chmod +x "$temp_script"
@@ -539,6 +545,9 @@ EOF
             cat > "$temp_script" << 'EOF'
 #!/bin/bash
 set -e
+# Source interactive shell configurations to have access to aliases and PATH
+[ -f ~/.bashrc ] && source ~/.bashrc
+[ -f ~/.bash_profile ] && source ~/.bash_profile
 EOF
             echo "$command" >> "$temp_script"
             chmod +x "$temp_script"
@@ -824,6 +833,7 @@ handle_option() {
             echo "2. Remove hot command"
             echo "3. Rename hot command"
             echo "4. Edit hot command"
+            echo "5. Show hot commands config file path"
             read -p "Enter your choice: " modify_option
             if [ -z "$modify_option" ]; then
                 return 0
@@ -833,6 +843,12 @@ handle_option() {
                 2) remove_hot_command "$venv_name" ;;
                 3) rename_hot_command "$venv_name" ;;
                 4) edit_hot_command "$venv_name" ;;
+                5) 
+                    echo -e "\nHot commands configuration file path:"
+                    echo "$HOTCMDS_FILE"
+                    echo -e "\nPress Enter to continue..."
+                    read
+                    ;;
                 *) echo "Invalid choice" ;;
             esac
             ;;
