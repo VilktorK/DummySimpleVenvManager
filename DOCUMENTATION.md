@@ -31,19 +31,30 @@ From the main menu, select a venv by its number to access these features:
 
 2. Modify hot commands
    - Add custom commands for quick access
-   - Edit existing commands
-   - Remove commands
+   - Remove existing hot commands
+   - Rename hot commands to give them custom names
+   - Edit existing hot commands
+   - Show config file paths
    - Hot commands execute within the working directory if configured
 
-3. Change working directory
+3. Manage container startup commands
+   - Add commands that run automatically when entering the venv
+   - Can be set globally or per-venv
+
+4. Set working directory
    - Update or set the directory where the venv starts
    - Configure whether hot commands use this directory
 
+5. Show launch script
+   - Display the generated launch script for the venv
+
 ## Hot Commands
 - Custom commands that can be executed by pressing their associated numbers
-- Appear as numbered options in the venv management menu
+- Appear as numbered options (6 and above) in the venv management menu
 - Can be configured to run within the working directory (A choice made when setting the working directory)
-- Saved to `venvhotcmds.cfg`
+- Each venv has its own hot commands file: `hotcommands/{venv_name}.cfg`
+- Commands can be given custom names for easier identification
+- Hot commands automatically load your shell environment (bashrc, bash_profile)
 
 ## Exiting a Venv
 - Type `exit` to leave an active venv and return to the main menu
@@ -58,7 +69,7 @@ From the main menu, select a venv by its number to access these features:
 Deletion process:
 - Removes the virtual environment
 - Cleans up associated configurations
-- Removes associated hot commands from `venvhotcmds.cfg`
+- Removes associated hot commands file
 
 ## Conda Support
 - Conda must be installed separately
@@ -69,9 +80,29 @@ Deletion process:
   - You'll be prompted to specify your conda installation directory
   - This setting is saved for future use in `condapath.cfg`
 
+## Sorting and Organization
+
+### Sorting Options
+Available from Options menu (4. Manage sorting preferences):
+- **Alphabetical** - Default sorting by venv name
+- **Most Recently Created** - Newest venvs first
+- **Most Recently Used** - Recently accessed venvs first
+
+### Favorites System
+Available from Options menu (6. Manage favorites):
+- Mark venvs as favorites for quick access
+- Favorites appear at the top of the main menu with ★ symbol
+- Shows Python version in brackets for easy identification
+- Favorites respect your chosen sorting method
+- Toggle favorite status on/off for any venv
+
 ## Config Location
 
 - Configuration directory: `~/.config/dummysimplevenvmanager/`
 - Settings file: `settings.cfg`
-- Hot commands: `venvhotcmds.cfg`
+- Hot commands directory: `hotcommands/`
+- Per-venv hot commands: `hotcommands/{venv_name}.cfg`
 - Conda Path: `condapath.cfg`
+- Favorites: `favorites.cfg`
+- Creation times: `creation_time.cfg`
+- Last access: `last_access.cfg`

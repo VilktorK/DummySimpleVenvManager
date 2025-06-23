@@ -10,6 +10,7 @@ A dummy simple BASH script that simplifies the process of creating and using Pyt
 - "Hot Commands" for easily executing commands inside of the venv without having to type or memorize them.
 - "Working Directory" to always open the venv inside of a specific directory for less "cd"ing.
 - "Startup Commands" that can be executed automatically when a venv is activated.
+- Organize venvs with favorites and sorting (alphabetical, recently created, recently used).
 
 ## Requirements
 
