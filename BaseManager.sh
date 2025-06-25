@@ -1087,54 +1087,33 @@ rename_hot_command() {
     local hot_cmd_lines=()
     local line_num=1
 
+    # Get per-container hot commands file
+    local container_hotcmds_file=$(get_container_hotcmds_file "$item_name")
+    
+    # Check if the file exists
+    if [ ! -f "$container_hotcmds_file" ]; then
+        echo "No hot commands to rename for $item_name."
+        echo "Press Enter to continue..."
+        read
+        return
+    fi
+
     # Collect commands, their names, and line numbers
     while IFS= read -r line || [ -n "$line" ]; do
         # Skip empty lines
         if [ -n "$line" ]; then
-            # Extract the box name (everything before first delimiter)
-            local box
+            # Per-container format: name:-:+:command (no container prefix)
             if [[ "$line" == *":-:+:"* ]]; then
-                box="${line%%:-:+:*}"
-            else
-                box="${line%%:*}"
-            fi
-            
-            if [ "$box" = "$item_name" ]; then
-                # Check for new exotic delimiter format first
-                if [[ "$line" == *":-:+:"* ]]; then
-                    # New format with exotic delimiter
-                    local after_delimiter="${line#*:-:+:}"
-                    if [[ "$after_delimiter" == *":-:+:"* ]]; then
-                        # Format: box:-:+:name:-:+:command
-                        local cmd_name="${after_delimiter%%:-:+:*}"
-                        local cmd="${after_delimiter#*:-:+:}"
-                        hot_cmds+=("$cmd")
-                        hot_cmd_names+=("$cmd_name")
-                    else
-                        # Format: box:-:+:command
-                        hot_cmds+=("$after_delimiter")
-                        hot_cmd_names+=("$after_delimiter")
-                    fi
-                else
-                    # Legacy single-colon format
-                    local after_first_colon="${line#*:}"
-                    if [[ "$after_first_colon" == *:* ]] && [[ "$after_first_colon" != *"://"* ]] && [[ "${after_first_colon#*:}" != *"://"* ]]; then
-                        # Old format: box:name:command
-                        local cmd_name="${after_first_colon%%:*}"
-                        local cmd="${after_first_colon#*:}"
-                        hot_cmds+=("$cmd")
-                        hot_cmd_names+=("$cmd_name")
-                    else
-                        # Old format: box:command
-                        hot_cmds+=("$after_first_colon")
-                        hot_cmd_names+=("$after_first_colon")
-                    fi
-                fi
+                # Format: name:-:+:command
+                local cmd_name="${line%%:-:+:*}"
+                local cmd="${line#*:-:+:}"
+                hot_cmds+=("$cmd")
+                hot_cmd_names+=("$cmd_name")
                 hot_cmd_lines+=("$line_num")
             fi
         fi
         line_num=$((line_num+1))
-    done < "$HOTCMDS_FILE"
+    done < "$container_hotcmds_file"
 
     if [ ${#hot_cmds[@]} -eq 0 ]; then
         echo "No hot commands to rename for $item_name."
@@ -1185,17 +1164,17 @@ rename_hot_command() {
         temp_file=$(mktemp)
         if [ -z "$new_name" ]; then
             # Reset to default (no custom name)
-            sed "${line_to_modify}d" "$HOTCMDS_FILE" > "$temp_file"
-            format_hot_command_line "$item_name" "$current_command" "" >> "$temp_file"
+            sed "${line_to_modify}d" "$container_hotcmds_file" > "$temp_file"
+            echo "$current_command:-:+:$current_command" >> "$temp_file"
             echo -e "\033[1;32mHot command name reset to default.\033[0m"
         else
             # Set custom name
-            sed "${line_to_modify}d" "$HOTCMDS_FILE" > "$temp_file"
-            format_hot_command_line "$item_name" "$current_command" "$new_name" >> "$temp_file"
+            sed "${line_to_modify}d" "$container_hotcmds_file" > "$temp_file"
+            echo "$new_name:-:+:$current_command" >> "$temp_file"
             echo -e "\033[1;32mHot command renamed successfully to \"$new_name\".\033[0m"
         fi
 
-        sort "$temp_file" > "$HOTCMDS_FILE"
+        sort "$temp_file" > "$container_hotcmds_file"
         rm "$temp_file"
     else
         echo "Invalid selection."
@@ -1214,33 +1193,33 @@ edit_hot_command() {
     local hot_cmd_lines=()
     local line_num=1
 
+    # Get per-container hot commands file
+    local container_hotcmds_file=$(get_container_hotcmds_file "$item_name")
+    
+    # Check if the file exists
+    if [ ! -f "$container_hotcmds_file" ]; then
+        echo "No hot commands to edit for $item_name."
+        echo "Press Enter to continue..."
+        read
+        return
+    fi
+
     # Collect commands, their names, and line numbers
     while IFS= read -r line || [ -n "$line" ]; do
         # Skip empty lines
         if [ -n "$line" ]; then
-            # Extract the box name (everything before first colon)
-            local box="${line%%:*}"
-            if [ "$box" = "$item_name" ]; then
-                # Get everything after the first colon
-                local after_first_colon="${line#*:}"
-                
-                # Check if there's another colon AND it's not part of a URL (indicating new format with custom name)
-                if [[ "$after_first_colon" == *:* ]] && [[ "$after_first_colon" != *"://"* ]] && [[ "${after_first_colon#*:}" != *"://"* ]]; then
-                    # New format: box:name:command
-                    local cmd_name="${after_first_colon%%:*}"
-                    local cmd="${after_first_colon#*:}"
-                    hot_cmds+=("$cmd")
-                    hot_cmd_names+=("$cmd_name")
-                else
-                    # Old format: box:command
-                    hot_cmds+=("$after_first_colon")
-                    hot_cmd_names+=("$after_first_colon")  # Default name is the command itself
-                fi
+            # Per-container format: name:-:+:command (no container prefix)
+            if [[ "$line" == *":-:+:"* ]]; then
+                # Format: name:-:+:command
+                local cmd_name="${line%%:-:+:*}"
+                local cmd="${line#*:-:+:}"
+                hot_cmds+=("$cmd")
+                hot_cmd_names+=("$cmd_name")
                 hot_cmd_lines+=("$line_num")
             fi
         fi
         line_num=$((line_num+1))
-    done < "$HOTCMDS_FILE"
+    done < "$container_hotcmds_file"
 
     if [ ${#hot_cmds[@]} -eq 0 ]; then
         echo "No hot commands to edit for $item_name."
@@ -1301,19 +1280,19 @@ edit_hot_command() {
                 
                 # Create a temp file and modify the line
                 temp_file=$(mktemp)
-                sed "${line_to_modify}d" "$HOTCMDS_FILE" > "$temp_file"
+                sed "${line_to_modify}d" "$container_hotcmds_file" > "$temp_file"
                 
                 if [ -z "$new_name" ]; then
                     # Reset to default (no custom name)
-                    echo "$item_name:$current_command" >> "$temp_file"
+                    echo "$current_command:-:+:$current_command" >> "$temp_file"
                     echo -e "\033[1;32mHot command name reset to default.\033[0m"
                 else
                     # Set custom name
-                    echo "$item_name:$new_name:$current_command" >> "$temp_file"
+                    echo "$new_name:-:+:$current_command" >> "$temp_file"
                     echo -e "\033[1;32mHot command renamed successfully to \"$new_name\".\033[0m"
                 fi
                 
-                sort "$temp_file" > "$HOTCMDS_FILE"
+                sort "$temp_file" > "$container_hotcmds_file"
                 rm "$temp_file"
                 ;;
             2)
@@ -1327,17 +1306,17 @@ edit_hot_command() {
                 
                 # Create a temp file and modify the line
                 temp_file=$(mktemp)
-                sed "${line_to_modify}d" "$HOTCMDS_FILE" > "$temp_file"
+                sed "${line_to_modify}d" "$container_hotcmds_file" > "$temp_file"
                 
                 if [ "$current_command" = "$current_name" ]; then
                     # No custom name, keep it that way
-                    echo "$item_name:$new_command" >> "$temp_file"
+                    echo "$new_command:-:+:$new_command" >> "$temp_file"
                 else
                     # Has custom name, preserve it
-                    echo "$item_name:$current_name:$new_command" >> "$temp_file"
+                    echo "$current_name:-:+:$new_command" >> "$temp_file"
                 fi
                 
-                sort "$temp_file" > "$HOTCMDS_FILE"
+                sort "$temp_file" > "$container_hotcmds_file"
                 rm "$temp_file"
                 echo -e "\033[1;32mHot command content updated successfully.\033[0m"
                 ;;
@@ -1353,19 +1332,19 @@ edit_hot_command() {
                 
                 # Create a temp file and modify the line
                 temp_file=$(mktemp)
-                sed "${line_to_modify}d" "$HOTCMDS_FILE" > "$temp_file"
+                sed "${line_to_modify}d" "$container_hotcmds_file" > "$temp_file"
                 
                 if [ -z "$new_name" ]; then
                     # Reset to default (no custom name)
-                    echo "$item_name:$new_command" >> "$temp_file"
+                    echo "$new_command:-:+:$new_command" >> "$temp_file"
                     echo -e "\033[1;32mHot command updated with default name.\033[0m"
                 else
                     # Set custom name
-                    echo "$item_name:$new_name:$new_command" >> "$temp_file"
+                    echo "$new_name:-:+:$new_command" >> "$temp_file"
                     echo -e "\033[1;32mHot command updated with name \"$new_name\".\033[0m"
                 fi
                 
-                sort "$temp_file" > "$HOTCMDS_FILE"
+                sort "$temp_file" > "$container_hotcmds_file"
                 rm "$temp_file"
                 ;;
             0)
@@ -1394,33 +1373,33 @@ remove_hot_command() {
     local hot_cmd_lines=()
     local line_num=1
 
+    # Get per-container hot commands file
+    local container_hotcmds_file=$(get_container_hotcmds_file "$item_name")
+    
+    # Check if the file exists
+    if [ ! -f "$container_hotcmds_file" ]; then
+        echo "No hot commands to remove for $item_name."
+        echo "Press Enter to continue..."
+        read
+        return
+    fi
+
     # Collect commands, names, and their line numbers
     while IFS= read -r line || [ -n "$line" ]; do
         # Skip empty lines
         if [ -n "$line" ]; then
-            # Extract the box name (everything before first colon)
-            local box="${line%%:*}"
-            if [ "$box" = "$item_name" ]; then
-                # Get everything after the first colon
-                local after_first_colon="${line#*:}"
-                
-                # Check if there's another colon AND it's not part of a URL (indicating new format with custom name)
-                if [[ "$after_first_colon" == *:* ]] && [[ "$after_first_colon" != *"://"* ]] && [[ "${after_first_colon#*:}" != *"://"* ]]; then
-                    # New format: box:name:command
-                    local cmd_name="${after_first_colon%%:*}"
-                    local cmd="${after_first_colon#*:}"
-                    hot_cmds+=("$cmd")
-                    hot_cmd_names+=("$cmd_name")
-                else
-                    # Old format: box:command
-                    hot_cmds+=("$after_first_colon")
-                    hot_cmd_names+=("$after_first_colon")  # Default name is the command itself
-                fi
+            # Per-container format: name:-:+:command (no container prefix)
+            if [[ "$line" == *":-:+:"* ]]; then
+                # Format: name:-:+:command
+                local cmd_name="${line%%:-:+:*}"
+                local cmd="${line#*:-:+:}"
+                hot_cmds+=("$cmd")
+                hot_cmd_names+=("$cmd_name")
                 hot_cmd_lines+=("$line_num")
             fi
         fi
         line_num=$((line_num+1))
-    done < "$HOTCMDS_FILE"
+    done < "$container_hotcmds_file"
 
     if [ ${#hot_cmds[@]} -eq 0 ]; then
         echo "No hot commands to remove for $item_name."
@@ -1460,8 +1439,8 @@ remove_hot_command() {
 
         # Create a temp file and remove the line
         temp_file=$(mktemp)
-        sed "${line_to_remove}d" "$HOTCMDS_FILE" > "$temp_file"
-        mv "$temp_file" "$HOTCMDS_FILE"
+        sed "${line_to_remove}d" "$container_hotcmds_file" > "$temp_file"
+        mv "$temp_file" "$container_hotcmds_file"
         echo -e "\033[1;32mHot command removed successfully.\033[0m"
     else
         echo "Invalid selection."
