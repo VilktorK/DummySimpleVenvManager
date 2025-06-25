@@ -513,7 +513,7 @@ execute_hot_command() {
                 local startup_temp_script=$(mktemp)
                 cat > "$startup_temp_script" << 'EOF'
 #!/bin/bash
-set -e
+# set -e removed to preserve output
 EOF
                 echo "$startup_cmd" >> "$startup_temp_script"
                 chmod +x "$startup_temp_script"
@@ -529,7 +529,7 @@ EOF
                     local container_temp_script=$(mktemp)
                     cat > "$container_temp_script" << 'EOF'
 #!/bin/bash
-set -e
+# set -e removed to preserve output
 EOF
                     echo "$cmd" >> "$container_temp_script"
                     chmod +x "$container_temp_script"
@@ -549,7 +549,7 @@ EOF
                 local temp_script=$(mktemp)
                 cat > "$temp_script" << 'EOF'
 #!/bin/bash
-set -e
+# set -e removed to preserve output
 # Source interactive shell configurations to have access to aliases and PATH
 [ -f ~/.bashrc ] && source ~/.bashrc
 [ -f ~/.bash_profile ] && source ~/.bash_profile
@@ -564,7 +564,7 @@ EOF
                 local temp_script=$(mktemp)
                 cat > "$temp_script" << 'EOF'
 #!/bin/bash
-set -e
+# set -e removed to preserve output
 # Source interactive shell configurations to have access to aliases and PATH
 [ -f ~/.bashrc ] && source ~/.bashrc
 [ -f ~/.bash_profile ] && source ~/.bash_profile
@@ -579,7 +579,7 @@ EOF
             local temp_script=$(mktemp)
             cat > "$temp_script" << 'EOF'
 #!/bin/bash
-set -e
+# set -e removed to preserve output
 # Source interactive shell configurations to have access to aliases and PATH
 [ -f ~/.bashrc ] && source ~/.bashrc
 [ -f ~/.bash_profile ] && source ~/.bash_profile
