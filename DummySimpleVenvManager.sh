@@ -514,10 +514,15 @@ execute_hot_command() {
                 cat > "$startup_temp_script" << 'EOF'
 #!/bin/bash
 # set -e removed to preserve output
+
+# Disable bracketed paste mode
+printf '\e[?2004l'
 EOF
                 echo "$startup_cmd" >> "$startup_temp_script"
                 chmod +x "$startup_temp_script"
+                printf '\e[?2004l' 2>/dev/null
                 bash "$startup_temp_script"
+                printf '\e[?2004l' 2>/dev/null
                 rm "$startup_temp_script"
             done < "$GLOBAL_STARTUP_CMDS_FILE"
         fi
@@ -530,10 +535,15 @@ EOF
                     cat > "$container_temp_script" << 'EOF'
 #!/bin/bash
 # set -e removed to preserve output
+
+# Disable bracketed paste mode
+printf '\e[?2004l'
 EOF
                     echo "$cmd" >> "$container_temp_script"
                     chmod +x "$container_temp_script"
+                    printf '\e[?2004l' 2>/dev/null
                     bash "$container_temp_script"
+                    printf '\e[?2004l' 2>/dev/null
                     rm "$container_temp_script"
                 fi
             done < "$CONTAINER_STARTUP_CMDS_FILE"
@@ -550,13 +560,19 @@ EOF
                 cat > "$temp_script" << 'EOF'
 #!/bin/bash
 # set -e removed to preserve output
+
+# Disable bracketed paste mode
+printf '\e[?2004l'
+
 # Source interactive shell configurations to have access to aliases and PATH
 [ -f ~/.bashrc ] && source ~/.bashrc
 [ -f ~/.bash_profile ] && source ~/.bash_profile
 EOF
                 echo "$command" >> "$temp_script"
                 chmod +x "$temp_script"
+                printf '\e[?2004l' 2>/dev/null
                 bash "$temp_script"
+                printf '\e[?2004l' 2>/dev/null
                 rm "$temp_script"
                 popd > /dev/null
             else
@@ -565,13 +581,19 @@ EOF
                 cat > "$temp_script" << 'EOF'
 #!/bin/bash
 # set -e removed to preserve output
+
+# Disable bracketed paste mode
+printf '\e[?2004l'
+
 # Source interactive shell configurations to have access to aliases and PATH
 [ -f ~/.bashrc ] && source ~/.bashrc
 [ -f ~/.bash_profile ] && source ~/.bash_profile
 EOF
                 echo "$command" >> "$temp_script"
                 chmod +x "$temp_script"
+                printf '\e[?2004l' 2>/dev/null
                 bash "$temp_script"
+                printf '\e[?2004l' 2>/dev/null
                 rm "$temp_script"
             fi
         else
@@ -580,13 +602,19 @@ EOF
             cat > "$temp_script" << 'EOF'
 #!/bin/bash
 # set -e removed to preserve output
+
+# Disable bracketed paste mode
+printf '\e[?2004l'
+
 # Source interactive shell configurations to have access to aliases and PATH
 [ -f ~/.bashrc ] && source ~/.bashrc
 [ -f ~/.bash_profile ] && source ~/.bash_profile
 EOF
             echo "$command" >> "$temp_script"
             chmod +x "$temp_script"
+            printf '\e[?2004l' 2>/dev/null
             bash "$temp_script"
+            printf '\e[?2004l' 2>/dev/null
             rm "$temp_script"
         fi
         deactivate
